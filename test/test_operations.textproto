@@ -1,0 +1,16 @@
+operations {
+  insert {
+    table_name: "TestTable"
+    column_values {
+      name: "TestColumn"
+      int_value: 1
+    }
+  }
+  insert {
+    table_name: "TestTable"
+    column_values {
+      name: "TestColumn"
+      int_value: 2
+    }
+  }
+}

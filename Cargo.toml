@@ -1,0 +1,12 @@
+[package]
+name = "socks"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.21", features = ["derive"] }
+protobuf = "3.7.1"
+
+[build-dependencies]
+protoc-bin-vendored = "3.1.0"
+protobuf-codegen = "3.7.1"

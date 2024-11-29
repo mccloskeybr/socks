@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+import "schema.proto";
+
+message Chunk {
+  uint64 id = 1;
+  oneof chunk_type {
+    Metadata metadata = 2;
+    Directory directory = 3;
+    RowDataNode row_data = 4;
+  }
+}
+
+message Metadata {
+  uint64 next_chunk_id = 1;
+  IndexSchema schema = 2;
+  uint64 root_chunk_id = 3;
+}
+
+message Directory {
+  message Entry {
+    uint64 id = 1;
+    uint64 offset = 2;
+  }
+  repeated Entry entries = 1;
+}
+
+message RowDataNode {
+  message Value {
+    oneof node_type {
+      InternalRow row_node = 1;
+      uint64 child_id = 2;
+    }
+  }
+  repeated Value values = 1;
+}
+
+message InternalRow {
+  string key = 1;
+  repeated InternalColumn col_values = 2;
+}
+
+message InternalColumn {
+  oneof value {
+    bool is_empty = 1;
+    int32 int_value = 2;
+  }
+}
