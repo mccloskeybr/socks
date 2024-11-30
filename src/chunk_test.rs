@@ -81,8 +81,8 @@ fn huge_chunk_fails_write() -> Result<(), Error> {
     let dir = chunk.mut_directory();
     for i in 0..CHUNK_SIZE {
         let mut entry = directory::Entry::new();
-        entry.id = std::u64::MAX;
-        entry.offset = std::u64::MAX;
+        entry.id = std::u32::MAX;
+        entry.offset = std::u32::MAX;
         dir.entries.push(entry);
     }
     assert!(dir.compute_size() > CHUNK_SIZE as u64);

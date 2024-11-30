@@ -11,27 +11,30 @@ message Chunk {
 }
 
 message Metadata {
-  uint64 next_chunk_id = 1;
-  uint64 next_chunk_offset = 2;
+  uint32 next_chunk_id = 1;
+  uint32 next_chunk_offset = 2;
   IndexSchema schema = 3;
-  uint64 root_chunk_id = 4;
-  uint64 num_directories = 5;
+  uint32 root_chunk_id = 4;
+  uint32 num_directories = 5;
 }
 
 message Directory {
+  // NOTE: use fixed32 so updating the offset of an existing entry
+  // won't cause the directory to suddenly exceed the chunk size.
+  // TODO: play with other options.
   message Entry {
-    uint64 id = 1;
-    uint64 offset = 2;
+    fixed32 id = 1;
+    fixed32 offset = 2;
   }
   repeated Entry entries = 1;
 }
 
 message RowDataNode {
-  uint64 id = 1;
+  uint32 id = 1;
   message Value {
     oneof node_type {
       InternalRow row_node = 1;
-      uint64 child_id = 2;
+      uint32 child_id = 2;
     }
   }
   repeated Value values = 2;

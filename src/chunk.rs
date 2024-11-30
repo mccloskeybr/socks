@@ -8,11 +8,12 @@ use crate::error::*;
 use crate::protos::generated::chunk::*;
 
 // Byte format of each chunk is the following:
-// 1. data size: u64 / 8 bytes.
+// 1. data size: u16 / 4 bytes.
 // 2. data: [u8] ChunkProto to end of section.
 // Each section is guaranteed to be of size CHUNK_SIZE.
 
 // NOTE: the maximum size of each chunk on disk.
+// TODO: make configurable.
 pub const CHUNK_SIZE: usize = 512;
 
 // NOTE: the amount of space remaining to consider a chunk as full.
@@ -38,8 +39,8 @@ fn chunk_from_bytes(bytes: &[u8; CHUNK_SIZE])
 -> Result<Chunk, Error> {
     let mut cursor: usize = 0;
 
-    let slice = read_data_update_cursor(bytes, std::mem::size_of::<u64>(), &mut cursor)?;
-    let chunk_size: u64 = u64::from_be_bytes(slice.try_into()?);
+    let slice = read_data_update_cursor(bytes, std::mem::size_of::<u16>(), &mut cursor)?;
+    let chunk_size = u16::from_be_bytes(slice.try_into()?);
 
     let slice = read_data_update_cursor(bytes, chunk_size as usize, &mut cursor)?;
     let chunk = Chunk::parse_from_bytes(&slice)?;
@@ -63,7 +64,7 @@ fn write_data_update_cursor(
 fn chunk_to_bytes(chunk: &Chunk)
 -> Result<[u8; CHUNK_SIZE], Error> {
     let data: Vec<u8> = chunk.write_to_bytes()?;
-    let data_len: usize = data.len();
+    let data_len: u16 = data.len().try_into().unwrap();
 
     let mut chunk = [0; CHUNK_SIZE];
     let mut cursor: usize = 0;
@@ -73,19 +74,19 @@ fn chunk_to_bytes(chunk: &Chunk)
     Ok(chunk)
 }
 
-pub fn read_chunk_at<R: Read + Seek>(reader: &mut R, chunk_offset: u64)
+pub fn read_chunk_at<R: Read + Seek>(reader: &mut R, chunk_offset: u32)
 -> Result<Chunk, Error> {
     let mut chunk_bytes: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
-    reader.seek(SeekFrom::Start(chunk_offset * CHUNK_SIZE as u64))?;
+    reader.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
     reader.read(&mut chunk_bytes)?;
     chunk_from_bytes(&chunk_bytes)
 }
 
 
-pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &Chunk, chunk_offset: u64)
+pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &Chunk, chunk_offset: u32)
 -> Result<(), Error> {
     let chunk_bytes: [u8; CHUNK_SIZE] = chunk_to_bytes(chunk)?;
-    writer.seek(SeekFrom::Start(chunk_offset * CHUNK_SIZE as u64))?;
+    writer.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
     writer.write(&chunk_bytes)?;
     writer.flush()?;
     Ok(())
@@ -94,7 +95,7 @@ pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &Chunk, chunk_offs
 pub fn would_chunk_overflow<M: Message>(chunk: &Chunk, msg: &M)
 -> bool {
     let size_estimate =
-        std::mem::size_of::<u64>() +
+        std::mem::size_of::<u16>() +
         chunk.compute_size() as usize +
         msg.compute_size() as usize +
         CHUNK_OVERFLOW_BUFFER;

@@ -21,10 +21,12 @@ use crate::protos::generated::chunk::*;
 pub struct Index<'a, F: 'a + Read + Write + Seek> {
     file: &'a mut F,
     metadata: Metadata,
+    num_chunk_writes: u64,
+    num_chunk_reads: u64,
 }
 
 impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
-    fn next_chunk_id(&mut self) -> u64 {
+    fn next_chunk_id(&mut self) -> u32 {
         let id = self.metadata.next_chunk_id;
         self.metadata.next_chunk_id += 1;
         id
@@ -36,16 +38,20 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
         let mut metadata_chunk = Chunk::new();
         metadata_chunk.set_metadata(self.metadata.clone());
         write_chunk_at::<F>(&mut self.file, &metadata_chunk, 0)?;
+        self.num_chunk_writes += 1;
         Ok(())
     }
 
-    fn find_offset_for_chunk(&mut self, chunk_id: u64)
-    -> Result<u64, Error> {
+    fn find_offset_for_chunk(&mut self, chunk_id: u32)
+    -> Result<u32, Error> {
         for i in 0..self.metadata.num_directories {
             let dir_chunk_offset = i + 1;
             let mut dir_chunk = read_chunk_at::<F>(&mut self.file, dir_chunk_offset)?;
+            self.num_chunk_reads += 1;
             if !dir_chunk.has_directory() {
-                return Err(Error::Internal("Chunk is not a directory!".into()));
+                return Err(Error::Internal(format!(
+                            "Chunk with offset: {} is not a directory!",
+                            dir_chunk_offset).into()));
             }
             let directory = dir_chunk.take_directory();
             for entry in directory.entries {
@@ -54,32 +60,41 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
                 }
             }
         }
-        Err(Error::NotFound("Chunk not found!".into()))
+        Err(Error::NotFound(format!(
+                    "Chunk {} not found!",
+                    chunk_id).into()))
     }
 
-    fn update_chunk_offset(&mut self, chunk_id: u64, chunk_offset: u64)
+    fn update_chunk_offset(&mut self, chunk_id: u32, chunk_offset: u32)
     -> Result<(), Error> {
         for i in 0..self.metadata.num_directories {
             let dir_chunk_offset = i + 1;
             let mut dir_chunk = read_chunk_at::<F>(&mut self.file, dir_chunk_offset)?;
+            self.num_chunk_reads += 1;
             if !dir_chunk.has_directory() {
-                return Err(Error::Internal("Chunk is not a directory!".into()));
+                return Err(Error::Internal(format!(
+                            "Chunk with offset: {} is not a directory!",
+                            dir_chunk_offset).into()));
             }
             let directory = dir_chunk.mut_directory();
             for entry in &mut directory.entries {
                 if entry.id == chunk_id {
                     entry.offset = chunk_offset;
                     write_chunk_at::<F>(&mut self.file, &dir_chunk, dir_chunk_offset)?;
+                    self.num_chunk_writes += 1;
                     return Ok(());
                 }
             }
         }
-        Err(Error::NotFound("Chunk not found!".into()))
+        Err(Error::NotFound(format!(
+                    "Chunk {} not found!",
+                    chunk_id).into()))
     }
 
-    fn find_and_read_chunk(&mut self, chunk_id: u64)
+    fn find_and_read_chunk(&mut self, chunk_id: u32)
     -> Result<Chunk, Error> {
         let chunk_offset = self.find_offset_for_chunk(chunk_id)?;
+        self.num_chunk_reads += 1;
         read_chunk_at::<F>(&mut self.file, chunk_offset)
     }
 
@@ -91,6 +106,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
             // NOTE: found existing chunk.
             Ok(chunk_offset) => {
                 write_chunk_at::<F>(&mut self.file, chunk, chunk_offset)?;
+                self.num_chunk_writes += 1;
             }
             // NOTE: detected writing a new chunk.
             // TODO: consider write partial success.
@@ -100,6 +116,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
                 // write chunk
                 let chunk_offset = self.metadata.next_chunk_offset;
                 write_chunk_at::<F>(&mut self.file, chunk, chunk_offset)?;
+                self.num_chunk_writes += 1;
                 self.metadata.next_chunk_offset += 1;
 
                 // write mapping
@@ -107,12 +124,15 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
                 dir_entry.id = chunk.row_data().id;
                 dir_entry.offset = chunk_offset;
 
-                let mut dir_chunk: Option<(Chunk, u64)> = None;
+                let mut dir_chunk: Option<(Chunk, u32)> = None;
                 for i in 0..self.metadata.num_directories {
                     let dir_chunk_offset = i + 1;
                     let mut test_dir_chunk = read_chunk_at::<F>(&mut self.file, dir_chunk_offset)?;
+                    self.num_chunk_reads += 1;
                     if !test_dir_chunk.has_directory() {
-                        return Err(Error::Internal("Chunk is not a directory!".into()));
+                        return Err(Error::Internal(format!(
+                                    "Chunk with offset: {} is not a directory!",
+                                    dir_chunk_offset).into()));
                     }
                     if !would_chunk_overflow(&test_dir_chunk, &dir_entry) {
                         dir_chunk = Some((test_dir_chunk, dir_chunk_offset));
@@ -125,6 +145,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
                     dir_chunk.0.mut_directory().entries.push(dir_entry);
                     log::trace!("{} :: {}", dir_chunk.0, dir_chunk.1);
                     write_chunk_at::<F>(&mut self.file, &dir_chunk.0, dir_chunk.1)?;
+                    self.num_chunk_writes += 1;
                 } else {
                     log::trace!("No directory with space available, creating a new one.");
 
@@ -134,12 +155,15 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
                     let new_dir_offset = 1 + self.metadata.num_directories;
                     let swap_chunk_offset = self.metadata.next_chunk_offset;
                     let swap_chunk = read_chunk_at::<F>(&mut self.file, new_dir_offset)?;
+                    self.num_chunk_reads += 1;
                     assert!(swap_chunk.has_row_data());
                     write_chunk_at::<F>(&mut self.file, &swap_chunk, swap_chunk_offset)?;
+                    self.num_chunk_writes += 1;
                     self.metadata.next_chunk_offset += 1;
                     self.update_chunk_offset(swap_chunk.row_data().id, swap_chunk_offset)?;
 
                     write_chunk_at::<F>(&mut self.file, &new_dir_chunk, new_dir_offset)?;
+                    self.num_chunk_writes += 1;
                     self.metadata.num_directories += 1;
                 }
 
@@ -184,6 +208,8 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
         Ok(Self {
             file: file,
             metadata: metadata,
+            num_chunk_reads: 0,
+            num_chunk_writes: 3,
         })
     }
 
@@ -191,28 +217,30 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
     -> Result<Self, Error> {
         let mut chunk: Chunk = read_chunk_at::<F>(file, 0)?;
         if !chunk.has_metadata() {
-            return Err(Error::InvalidArgument("First chunk not metadata as expected!".into()));
+            return Err(Error::InvalidArgument(
+                    "First chunk not metadata as expected!".into()));
         }
         let metadata = chunk.take_metadata();
         if metadata.schema.is_none() {
-            return Err(Error::InvalidArgument("No schema present!".into()));
+            return Err(Error::InvalidArgument(
+                    "No schema present!".into()));
         }
         Ok(Self {
             file: file,
             metadata: metadata,
+            num_chunk_reads: 0,
+            num_chunk_writes: 0,
         })
     }
 
     // TODO: ensure key doesn't already exist
-    // TODO: follow more efficient splitting algorithm
+    // TODO: follow a more efficient splitting algorithm
     pub fn insert(&mut self, op: Insert)
     -> Result<(), Error> {
         let row = transform_insert_op(op, &self.metadata.schema);
         log::trace!("Inserting row: {row}");
-
         let mut root_chunk = self.find_and_read_chunk(self.metadata.root_chunk_id)?;
         assert!(root_chunk.has_row_data());
-
         if would_chunk_overflow(&root_chunk, &row) {
             log::trace!("Root overflow detected.");
 
@@ -231,9 +259,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
 
             self.split_child(&mut root_chunk, &mut child_chunk, 0)?;
         }
-
         self.insert_non_full(&mut root_chunk, row)?;
-
         Ok(())
     }
 
@@ -284,7 +310,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
             }
 
             self.insert_non_full(&mut child_chunk, row)?;
-            return Ok(());
+            Ok(())
         }
     }
 
@@ -319,6 +345,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
         self.commit_chunk(left_child_chunk)?;
         self.commit_chunk(&right_child_chunk)?;
         self.commit_chunk(parent_chunk)?;
+        self.commit_metadata()?;
 
         Ok(())
     }

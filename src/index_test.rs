@@ -164,6 +164,25 @@ fn insert_values_overflow() -> Result<(), Error> {
         index.insert(op)?;
     }
 
+    let metadata = read_chunk_at(&mut context.file, 0)?;
+    let metadata = metadata.metadata();
+    assert_eq!(metadata.next_chunk_id, 4);
+    assert_eq!(metadata.next_chunk_offset, 6);
+    assert_eq!(metadata.root_chunk_id, 0);
+    assert_eq!(metadata.num_directories, 1);
+
+    let dir = read_chunk_at(&mut context.file, 1)?;
+    let dir = dir.directory();
+    assert_eq!(dir.entries.len(), 4);
+    assert_eq!(dir.entries[0].id, 0);
+    assert_eq!(dir.entries[0].offset, 2);
+    assert_eq!(dir.entries[1].id, 1);
+    assert_eq!(dir.entries[1].offset, 3);
+    assert_eq!(dir.entries[2].id, 2);
+    assert_eq!(dir.entries[2].offset, 4);
+    assert_eq!(dir.entries[3].id, 3);
+    assert_eq!(dir.entries[3].offset, 5);
+
     assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 6);
     for i in 2..5 {
         let row_data_chunk = read_chunk_at(&mut context.file, i)?;
