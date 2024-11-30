@@ -4,6 +4,7 @@ pub enum Error {
     NotFound(String),
     OutOfBounds(String),
     AlreadyExists(String),
+    Internal(String),
     Other(Box<dyn std::error::Error>),
 }
 
@@ -18,6 +19,7 @@ impl std::fmt::Display for Error {
             Error::OutOfBounds(s) => write!(f, "{}", s),
             Error::AlreadyExists(s) => write!(f, "{}", s),
             Error::InvalidArgument(s) => write!(f, "{}", s),
+            Error::Internal(s) => write!(f, "{}", s),
             Error::Other(e) => e.fmt(f),
         }
     }

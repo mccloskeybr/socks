@@ -3,7 +3,6 @@ syntax = "proto3";
 import "schema.proto";
 
 message Chunk {
-  uint64 id = 1;
   oneof chunk_type {
     Metadata metadata = 2;
     Directory directory = 3;
@@ -13,8 +12,10 @@ message Chunk {
 
 message Metadata {
   uint64 next_chunk_id = 1;
-  IndexSchema schema = 2;
-  uint64 root_chunk_id = 3;
+  uint64 next_chunk_offset = 2;
+  IndexSchema schema = 3;
+  uint64 root_chunk_id = 4;
+  uint64 num_directories = 5;
 }
 
 message Directory {
@@ -26,13 +27,14 @@ message Directory {
 }
 
 message RowDataNode {
+  uint64 id = 1;
   message Value {
     oneof node_type {
       InternalRow row_node = 1;
       uint64 child_id = 2;
     }
   }
-  repeated Value values = 1;
+  repeated Value values = 2;
 }
 
 message InternalRow {

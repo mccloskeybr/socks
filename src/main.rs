@@ -4,6 +4,7 @@ mod chunk;
 mod error;
 mod index;
 mod protos;
+mod transform;
 mod validations;
 
 use std::fs;
@@ -61,7 +62,7 @@ fn create(op: &Operation)
     let mut db_file = fs::File::create(db_path)?;
     let schema = text_format::parse_from_str::<DatabaseSchema>(
             &fs::read_to_string(schema_path)?)?;
-    Index::create(db_file.try_clone()?, schema.index.unwrap())?;
+    Index::create(&mut db_file, schema.index.unwrap())?;
 
     Ok(())
 }

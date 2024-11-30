@@ -1,0 +1,174 @@
+use crate::index::*;
+use crate::protos::generated::chunk::*;
+use crate::protos::generated::schema::*;
+use protobuf::text_format::parse_from_str;
+use std::io::Cursor;
+
+struct TestContext {
+    file: std::io::Cursor<Vec<u8>>,
+    schema: IndexSchema,
+}
+
+fn setup() -> TestContext {
+    let _ = env_logger::builder().is_test(true).try_init();
+    let schema = parse_from_str::<IndexSchema>("
+        name: \"TestIndex\"
+        columns {
+            name: \"Key\"
+            type: INTEGER
+            is_key: true
+        }").unwrap();
+    TestContext {
+        file: std::io::Cursor::<Vec<u8>>::new(Vec::new()),
+        schema: schema,
+    }
+}
+
+fn validate_node_sorted(node: &RowDataNode) {
+    let mut max_key_seen: Option<String> = None;
+    for val in &node.values {
+        if val.has_child_id() {
+            continue;
+        } else if max_key_seen.is_none() {
+            max_key_seen = Some(val.row_node().key.clone());
+            continue;
+        }
+        assert!(max_key_seen.unwrap() <= val.row_node().key);
+        max_key_seen = Some(val.row_node().key.clone());
+    }
+}
+
+#[test]
+fn create_success() -> Result<(), Error> {
+    let mut context = setup();
+
+    Index::create(&mut context.file, context.schema)?;
+    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 3);
+    let chunk_0 = read_chunk_at(&mut context.file, 0)?;
+    let chunk_1 = read_chunk_at(&mut context.file, 1)?;
+    let chunk_2 = read_chunk_at(&mut context.file, 2)?;
+
+    assert!(chunk_0.has_metadata());
+    let metadata = chunk_0.metadata();
+    assert_eq!(metadata.next_chunk_id, 1);
+    assert_eq!(metadata.next_chunk_offset, 3);
+    assert_eq!(metadata.root_chunk_id, 0);
+
+    assert!(chunk_1.has_directory());
+    let dir = chunk_1.directory();
+    assert_eq!(dir.entries.len(), 1);
+    assert_eq!(dir.entries[0].id, 0);
+    assert_eq!(dir.entries[0].offset, 2);
+
+    assert!(chunk_2.has_row_data());
+    let row_data = chunk_2.row_data();
+    assert_eq!(row_data.id, 0);
+    assert_eq!(row_data.values.len(), 0);
+
+    Ok(())
+}
+
+#[test]
+fn open_success() -> Result<(), Error> {
+    let mut context = setup();
+    Index::create(&mut context.file, context.schema)?;
+    Index::open(&mut context.file)?;
+    Ok(())
+}
+
+#[test]
+fn insert_single_value() -> Result<(), Error> {
+    let mut context = setup();
+    let mut index = Index::create(&mut context.file, context.schema.clone())?;
+
+    let op = parse_from_str::<Insert>("
+            index_name: \"TestIndex\"
+            column_values {
+                name: \"Key\"
+                int_value: 1
+            }")?;
+    index.insert(op.clone())?;
+
+    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 3);
+    let row_data_chunk = read_chunk_at(&mut context.file, 2)?;
+
+    assert!(row_data_chunk.has_row_data());
+    let row_data = row_data_chunk.row_data();
+    assert_eq!(row_data.id, 0);
+    assert_eq!(row_data.values.len(), 1);
+    assert!(row_data.values[0].has_row_node());
+    assert_eq!(*row_data.values[0].row_node(), transform_insert_op(op, &context.schema));
+
+    Ok(())
+}
+
+#[test]
+fn insert_some_values_sorted() -> Result<(), Error> {
+    let mut context = setup();
+    let mut index = Index::create(&mut context.file, context.schema.clone())?;
+
+    let op_1 = parse_from_str::<Insert>("
+            index_name: \"TestIndex\"
+            column_values {
+                name: \"Key\"
+                int_value: 1
+            }")?;
+    let op_2 = parse_from_str::<Insert>("
+            index_name: \"TestIndex\"
+            column_values {
+                name: \"Key\"
+                int_value: 2
+            }")?;
+    let op_3 = parse_from_str::<Insert>("
+            index_name: \"TestIndex\"
+            column_values {
+                name: \"Key\"
+                int_value: 3
+            }")?;
+    index.insert(op_1.clone())?;
+    index.insert(op_2.clone())?;
+    index.insert(op_3.clone())?;
+
+    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 3);
+    let row_data_chunk = read_chunk_at(&mut context.file, 2)?;
+
+    assert!(row_data_chunk.has_row_data());
+    let row_data = row_data_chunk.row_data();
+    validate_node_sorted(row_data);
+    assert_eq!(row_data.id, 0);
+    assert_eq!(row_data.values.len(), 3);
+    let row_1 = row_data.values[0].row_node();
+    let row_2 = row_data.values[1].row_node();
+    let row_3 = row_data.values[2].row_node();
+    assert_eq!(*row_1, transform_insert_op(op_1, &context.schema));
+    assert_eq!(*row_2, transform_insert_op(op_2, &context.schema));
+    assert_eq!(*row_3, transform_insert_op(op_3, &context.schema));
+
+    Ok(())
+}
+
+#[test]
+fn insert_values_overflow() -> Result<(), Error> {
+    let mut context = setup();
+    let mut index = Index::create(&mut context.file, context.schema.clone())?;
+
+    for i in 0..60 {
+        let mut col_val = ColumnValue::new();
+        col_val.name = "Key".into();
+        col_val.set_int_value(i as i32);
+
+        let mut op = Insert::new();
+        op.index_name = "TestIndex".into();
+        op.column_values.push(col_val);
+
+        index.insert(op)?;
+    }
+
+    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 6);
+    for i in 2..5 {
+        let row_data_chunk = read_chunk_at(&mut context.file, i)?;
+        validate_node_sorted(row_data_chunk.row_data());
+    }
+
+    Ok(())
+}

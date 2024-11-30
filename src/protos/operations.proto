@@ -8,7 +8,7 @@ message ColumnValue {
 }
 
 message Insert {
-  string table_name = 1;
+  string index_name = 1;
   repeated ColumnValue column_values = 2;
 }
 
