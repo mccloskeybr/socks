@@ -19,7 +19,6 @@ pub fn is_leaf_node(data: &DataProto) -> bool {
 
 pub fn find_chunk<F: Read + Write + Seek>(index: &mut Index<F>, id: u32) -> Result<ChunkProto, Error> {
     let offset = directory::find_chunk_offset(index, id)?;
-    log::trace!("found id {} at offset {}", id, offset);
     chunk::read_chunk_at::<F>(&mut index.file, offset)
 }
 
@@ -37,6 +36,5 @@ pub fn commit_chunk<F: Read + Write + Seek>(index: &mut Index<F>, chunk: &ChunkP
         },
         Err(e) => { Err(e)? },
     };
-    metadata::commit_metadata(index)?;
     Ok(())
 }

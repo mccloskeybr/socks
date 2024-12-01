@@ -77,12 +77,18 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
         })
     }
 
-    pub fn insert(&mut self, op: Insert) -> Result<(), Error> {
+    pub fn insert(&mut self, op: InsertProto) -> Result<(), Error> {
         // TODO: validate op
         let row: InternalRowProto = transform::insert_op(op, &self.metadata.schema);
         log::trace!("Inserting row: {row}");
 
         // TODO: this algorithm splits greedily -- follow a better one
         b_tree::cormen_insert::insert(self, row)
+    }
+
+    pub fn read_row(&mut self, op: ReadRowProto) -> Result<InternalRowProto, Error> {
+        // TODO: validate op
+        let key: String = transform::read_row_op(op, &self.metadata.schema);
+        b_tree::read::read_row(self, self.metadata.root_chunk_id, key)
     }
 }

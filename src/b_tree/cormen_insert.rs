@@ -93,7 +93,6 @@ fn split_child<F: Read + Write + Seek>(
     row_data::commit_chunk(index, left_child_chunk)?;
     row_data::commit_chunk(index, &right_child_chunk)?;
     row_data::commit_chunk(index, parent_chunk)?;
-    metadata::commit_metadata(index)?;
 
     Ok(())
 }
@@ -125,5 +124,6 @@ pub fn insert<F: Read + Write + Seek>(
         split_child(index, &mut root_chunk, &mut child_chunk, 0)?;
     }
     insert_non_full(index, &mut root_chunk, row)?;
+    metadata::commit_metadata(index)?;
     Ok(())
 }

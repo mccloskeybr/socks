@@ -41,7 +41,7 @@ fn validate_node_sorted(node: &DataProto) {
 }
 
 #[test]
-fn create_success() -> Result<(), Error> {
+fn create_ok() -> Result<(), Error> {
     let mut context = setup();
 
     Index::create(&mut context.file, context.schema)?;
@@ -71,7 +71,7 @@ fn create_success() -> Result<(), Error> {
 }
 
 #[test]
-fn open_success() -> Result<(), Error> {
+fn open_ok() -> Result<(), Error> {
     let mut context = setup();
     Index::create(&mut context.file, context.schema)?;
     Index::open(&mut context.file)?;
@@ -79,11 +79,11 @@ fn open_success() -> Result<(), Error> {
 }
 
 #[test]
-fn insert_single_value() -> Result<(), Error> {
+fn insert_single_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(&mut context.file, context.schema.clone())?;
 
-    let op = parse_from_str::<Insert>("
+    let op = parse_from_str::<InsertProto>("
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
@@ -105,23 +105,23 @@ fn insert_single_value() -> Result<(), Error> {
 }
 
 #[test]
-fn insert_some_values_sorted() -> Result<(), Error> {
+fn insert_sorted() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(&mut context.file, context.schema.clone())?;
 
-    let op_1 = parse_from_str::<Insert>("
+    let op_1 = parse_from_str::<InsertProto>("
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
                 int_value: 1
             }")?;
-    let op_2 = parse_from_str::<Insert>("
+    let op_2 = parse_from_str::<InsertProto>("
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
                 int_value: 2
             }")?;
-    let op_3 = parse_from_str::<Insert>("
+    let op_3 = parse_from_str::<InsertProto>("
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
@@ -150,16 +150,16 @@ fn insert_some_values_sorted() -> Result<(), Error> {
 }
 
 #[test]
-fn insert_values_overflow() -> Result<(), Error> {
+fn insert_many_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(&mut context.file, context.schema.clone())?;
 
     for i in 0..60 {
-        let mut col_val = ColumnValue::new();
+        let mut col_val = ColumnValueProto::new();
         col_val.name = "Key".into();
         col_val.set_int_value(i as i32);
 
-        let mut op = Insert::new();
+        let mut op = InsertProto::new();
         op.index_name = "TestIndex".into();
         op.column_values.push(col_val);
 
@@ -194,24 +194,69 @@ fn insert_values_overflow() -> Result<(), Error> {
     Ok(())
 }
 
-/*
 #[test]
-fn insert_large_number_of_rows() -> Result<(), Error> {
+fn read_row_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(&mut context.file, context.schema.clone())?;
 
-    for i in 0..100000 {
-        let mut col_val = ColumnValue::new();
+    let insert_op = parse_from_str::<InsertProto>("
+            index_name: \"TestIndex\"
+            column_values {
+                name: \"Key\"
+                int_value: 1
+            }")?;
+    index.insert(insert_op)?;
+
+    let read_op = parse_from_str::<ReadRowProto>("
+            index_name: \"TestIndex\"
+            key_values {
+                name: \"Key\"
+                int_value: 1
+            }")?;
+    let read_result: InternalRowProto = index.read_row(read_op)?;
+
+    assert_eq!(read_result, parse_from_str::<InternalRowProto>("
+            key: \"1.\"
+            col_values { int_value: 1 }")?);
+    Ok(())
+}
+
+#[test]
+fn read_row_many_ok() -> Result<(), Error> {
+    let mut context = setup();
+    let mut index = Index::create(&mut context.file, context.schema.clone())?;
+    let num_iter = 60;
+
+    for i in 0..num_iter {
+        let mut col_val = ColumnValueProto::new();
         col_val.name = "Key".into();
         col_val.set_int_value(i as i32);
 
-        let mut op = Insert::new();
+        let mut op = InsertProto::new();
         op.index_name = "TestIndex".into();
         op.column_values.push(col_val);
 
         index.insert(op)?;
     }
+    for i in 0..num_iter {
+        let mut key_val = ColumnValueProto::new();
+        key_val.name = "Key".into();
+        key_val.set_int_value(i as i32);
+
+        let mut op = ReadRowProto::new();
+        op.index_name = "TestIndex".into();
+        op.key_values.push(key_val);
+
+        let read_result = index.read_row(op)?;
+
+        let mut expected_col_val = InternalColumnProto::new();
+        expected_col_val.set_int_value(i);
+        let mut expected_read_result = InternalRowProto::new();
+        expected_read_result.key += &format!("{}.", i.to_string());
+        expected_read_result.col_values.push(expected_col_val);
+
+        assert_eq!(read_result, expected_read_result);
+    }
 
     Ok(())
 }
-*/

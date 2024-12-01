@@ -73,7 +73,7 @@ fn execute(op: &Operation) -> Result<(), Error> {
     } = op else { panic!("Unexpected arguments passed to execute!"); };
 
     let operation_list =
-        text_format::parse_from_str::<OperationList>(
+        text_format::parse_from_str::<OperationListProto>(
             &fs::read_to_string(ops_path)?)?;
     let mut db_file = fs::File::open(db_path)?;
 

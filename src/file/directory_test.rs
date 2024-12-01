@@ -32,7 +32,7 @@ fn find_chunk_offset_success() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(&mut context.file, context.schema.clone())?;
     for i in 0..60 {
-        index.insert(parse_from_str::<Insert>("
+        index.insert(parse_from_str::<InsertProto>("
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"

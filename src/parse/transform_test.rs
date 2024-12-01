@@ -23,7 +23,7 @@ fn insert_op_success() -> Result<(), Error> {
             name: \"Col\"
             type: INTEGER
         }").unwrap();
-    let op = parse_from_str::<Insert>("
+    let op = parse_from_str::<InsertProto>("
         index_name: \"TestIndex\"
         column_values {
             name: \"Key\"
