@@ -1,12 +1,12 @@
 #![allow(warnings)]
 
-mod file;
-
+mod b_tree;
 mod error;
+mod file;
 mod index;
+mod parse;
 mod protos;
-mod transform;
-mod validations;
+mod stats;
 
 use std::fs;
 use std::io::Write;
@@ -48,8 +48,7 @@ enum Operation {
     },
 }
 
-fn create(op: &Operation)
--> Result<(), Error> {
+fn create(op: &Operation) -> Result<(), Error> {
     let Operation::Create{
         db_path,
         schema_path,
@@ -67,8 +66,7 @@ fn create(op: &Operation)
     Ok(())
 }
 
-fn execute(op: &Operation)
--> Result<(), Error> {
+fn execute(op: &Operation) -> Result<(), Error> {
     let Operation::Execute{
         db_path,
         ops_path,
@@ -84,8 +82,7 @@ fn execute(op: &Operation)
     Ok(())
 }
 
-fn main()
--> Result<(), Error> {
+fn main() -> Result<(), Error> {
     let args = Args::parse();
     match args.op {
         Operation::Create{ .. } => create(&args.op)?,

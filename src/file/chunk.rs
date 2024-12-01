@@ -4,6 +4,7 @@ mod test;
 
 use std::io::{Read, Write, Seek, SeekFrom};
 use protobuf::Message;
+use crate::stats;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 
@@ -79,6 +80,7 @@ pub fn read_chunk_at<R: Read + Seek>(reader: &mut R, chunk_offset: u32)
     let mut chunk_bytes: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
     reader.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
     reader.read(&mut chunk_bytes)?;
+    stats::increment_chunk_read();
     chunk_from_bytes(&chunk_bytes)
 }
 
@@ -89,6 +91,7 @@ pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &ChunkProto, chunk
     writer.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
     writer.write(&chunk_bytes)?;
     writer.flush()?;
+    stats::increment_chunk_write();
     Ok(())
 }
 

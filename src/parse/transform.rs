@@ -2,7 +2,6 @@
 #[path = "./transform_test.rs"]
 mod test;
 
-use crate::error::*;
 use crate::protos::generated::operations::*;
 use crate::protos::generated::schema::*;
 use crate::protos::generated::chunk::*;
@@ -14,8 +13,7 @@ fn get_col_value_as_string(col_val: &ColumnValue) -> String {
     }
 }
 
-fn get_col_schema<'a>(schema: &'a IndexSchema, col_name: &String)
--> &'a ColumnSchema {
+fn get_col_schema<'a>(schema: &'a IndexSchema, col_name: &String) -> &'a ColumnSchema {
     for col in &schema.columns {
         if col.name == *col_name {
             return col;
@@ -27,8 +25,7 @@ fn get_col_schema<'a>(schema: &'a IndexSchema, col_name: &String)
 // TODO: validate no duplicate columns
 // TODO: validate keys specified first
 // TODO: validate column value match b/w op and schema
-pub fn transform_insert_op(validated_op: Insert, schema: &IndexSchema)
--> InternalRowProto {
+pub fn insert_op(validated_op: Insert, schema: &IndexSchema) -> InternalRowProto {
     let mut internal_row = InternalRowProto::new();
     for col_val in &validated_op.column_values {
         let col_schema: &ColumnSchema = get_col_schema(schema, &col_val.name);

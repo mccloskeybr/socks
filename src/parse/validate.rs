@@ -53,8 +53,7 @@ fn table_has_single_primary_key(schema: &IndexSchema)
     Ok(())
 }
 
-pub fn validate_schema(schema: &IndexSchema)
--> Result<(), Error> {
+pub fn schema(schema: &IndexSchema) -> Result<(), Error> {
     table_has_name(&schema)?;
     table_has_single_primary_key(&schema)?;
     table_columns_have_types(&schema)?;

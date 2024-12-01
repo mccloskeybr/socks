@@ -1,5 +1,6 @@
 use crate::index::*;
 use crate::file::*;
+use crate::parse::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::schema::*;
 use protobuf::text_format::parse_from_str;
@@ -98,7 +99,7 @@ fn insert_single_value() -> Result<(), Error> {
     assert_eq!(data.id, 0);
     assert_eq!(data.values.len(), 1);
     assert!(data.values[0].has_row_node());
-    assert_eq!(*data.values[0].row_node(), transform_insert_op(op, &context.schema));
+    assert_eq!(*data.values[0].row_node(), transform::insert_op(op, &context.schema));
 
     Ok(())
 }
@@ -141,9 +142,9 @@ fn insert_some_values_sorted() -> Result<(), Error> {
     let row_1 = data.values[0].row_node();
     let row_2 = data.values[1].row_node();
     let row_3 = data.values[2].row_node();
-    assert_eq!(*row_1, transform_insert_op(op_1, &context.schema));
-    assert_eq!(*row_2, transform_insert_op(op_2, &context.schema));
-    assert_eq!(*row_3, transform_insert_op(op_3, &context.schema));
+    assert_eq!(*row_1, transform::insert_op(op_1, &context.schema));
+    assert_eq!(*row_2, transform::insert_op(op_2, &context.schema));
+    assert_eq!(*row_3, transform::insert_op(op_3, &context.schema));
 
     Ok(())
 }

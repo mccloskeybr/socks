@@ -1,5 +1,5 @@
 use crate::error::*;
-use crate::transform::*;
+use crate::parse::transform::*;
 use crate::protos::generated::operations::*;
 use crate::protos::generated::schema::*;
 use crate::protos::generated::chunk::*;
@@ -10,7 +10,7 @@ fn setup() {
 }
 
 #[test]
-fn transform_insert_op_success() -> Result<(), Error> {
+fn insert_op_success() -> Result<(), Error> {
     setup();
     let schema = parse_from_str::<IndexSchema>("
         name: \"TestIndex\"
@@ -34,7 +34,7 @@ fn transform_insert_op_success() -> Result<(), Error> {
             int_value: 2
         }").unwrap();
 
-    let transformed = transform_insert_op(op, &schema);
+    let transformed = insert_op(op, &schema);
     assert_eq!(
         transformed,
         parse_from_str::<InternalRowProto>("
