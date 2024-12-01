@@ -1,4 +1,5 @@
 use crate::index::*;
+use crate::file::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::schema::*;
 use protobuf::text_format::parse_from_str;
@@ -24,7 +25,7 @@ fn setup() -> TestContext {
     }
 }
 
-fn validate_node_sorted(node: &RowDataNode) {
+fn validate_node_sorted(node: &DataProto) {
     let mut max_key_seen: Option<String> = None;
     for val in &node.values {
         if val.has_child_id() {
@@ -43,10 +44,10 @@ fn create_success() -> Result<(), Error> {
     let mut context = setup();
 
     Index::create(&mut context.file, context.schema)?;
-    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 3);
-    let chunk_0 = read_chunk_at(&mut context.file, 0)?;
-    let chunk_1 = read_chunk_at(&mut context.file, 1)?;
-    let chunk_2 = read_chunk_at(&mut context.file, 2)?;
+    assert_eq!(context.file.get_ref().len(), chunk::CHUNK_SIZE * 3);
+    let chunk_0 = chunk::read_chunk_at(&mut context.file, 0)?;
+    let chunk_1 = chunk::read_chunk_at(&mut context.file, 1)?;
+    let chunk_2 = chunk::read_chunk_at(&mut context.file, 2)?;
 
     assert!(chunk_0.has_metadata());
     let metadata = chunk_0.metadata();
@@ -60,10 +61,10 @@ fn create_success() -> Result<(), Error> {
     assert_eq!(dir.entries[0].id, 0);
     assert_eq!(dir.entries[0].offset, 2);
 
-    assert!(chunk_2.has_row_data());
-    let row_data = chunk_2.row_data();
-    assert_eq!(row_data.id, 0);
-    assert_eq!(row_data.values.len(), 0);
+    assert!(chunk_2.has_data());
+    let data = chunk_2.data();
+    assert_eq!(data.id, 0);
+    assert_eq!(data.values.len(), 0);
 
     Ok(())
 }
@@ -89,15 +90,15 @@ fn insert_single_value() -> Result<(), Error> {
             }")?;
     index.insert(op.clone())?;
 
-    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 3);
-    let row_data_chunk = read_chunk_at(&mut context.file, 2)?;
+    assert_eq!(context.file.get_ref().len(), chunk::CHUNK_SIZE * 3);
+    let data_chunk = chunk::read_chunk_at(&mut context.file, 2)?;
 
-    assert!(row_data_chunk.has_row_data());
-    let row_data = row_data_chunk.row_data();
-    assert_eq!(row_data.id, 0);
-    assert_eq!(row_data.values.len(), 1);
-    assert!(row_data.values[0].has_row_node());
-    assert_eq!(*row_data.values[0].row_node(), transform_insert_op(op, &context.schema));
+    assert!(data_chunk.has_data());
+    let data = data_chunk.data();
+    assert_eq!(data.id, 0);
+    assert_eq!(data.values.len(), 1);
+    assert!(data.values[0].has_row_node());
+    assert_eq!(*data.values[0].row_node(), transform_insert_op(op, &context.schema));
 
     Ok(())
 }
@@ -129,17 +130,17 @@ fn insert_some_values_sorted() -> Result<(), Error> {
     index.insert(op_2.clone())?;
     index.insert(op_3.clone())?;
 
-    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 3);
-    let row_data_chunk = read_chunk_at(&mut context.file, 2)?;
+    assert_eq!(context.file.get_ref().len(), chunk::CHUNK_SIZE * 3);
+    let data_chunk = chunk::read_chunk_at(&mut context.file, 2)?;
 
-    assert!(row_data_chunk.has_row_data());
-    let row_data = row_data_chunk.row_data();
-    validate_node_sorted(row_data);
-    assert_eq!(row_data.id, 0);
-    assert_eq!(row_data.values.len(), 3);
-    let row_1 = row_data.values[0].row_node();
-    let row_2 = row_data.values[1].row_node();
-    let row_3 = row_data.values[2].row_node();
+    assert!(data_chunk.has_data());
+    let data = data_chunk.data();
+    validate_node_sorted(data);
+    assert_eq!(data.id, 0);
+    assert_eq!(data.values.len(), 3);
+    let row_1 = data.values[0].row_node();
+    let row_2 = data.values[1].row_node();
+    let row_3 = data.values[2].row_node();
     assert_eq!(*row_1, transform_insert_op(op_1, &context.schema));
     assert_eq!(*row_2, transform_insert_op(op_2, &context.schema));
     assert_eq!(*row_3, transform_insert_op(op_3, &context.schema));
@@ -164,14 +165,14 @@ fn insert_values_overflow() -> Result<(), Error> {
         index.insert(op)?;
     }
 
-    let metadata = read_chunk_at(&mut context.file, 0)?;
+    let metadata = chunk::read_chunk_at(&mut context.file, 0)?;
     let metadata = metadata.metadata();
     assert_eq!(metadata.next_chunk_id, 4);
     assert_eq!(metadata.next_chunk_offset, 6);
     assert_eq!(metadata.root_chunk_id, 0);
     assert_eq!(metadata.num_directories, 1);
 
-    let dir = read_chunk_at(&mut context.file, 1)?;
+    let dir = chunk::read_chunk_at(&mut context.file, 1)?;
     let dir = dir.directory();
     assert_eq!(dir.entries.len(), 4);
     assert_eq!(dir.entries[0].id, 0);
@@ -183,11 +184,33 @@ fn insert_values_overflow() -> Result<(), Error> {
     assert_eq!(dir.entries[3].id, 3);
     assert_eq!(dir.entries[3].offset, 5);
 
-    assert_eq!(context.file.get_ref().len(), CHUNK_SIZE * 6);
+    assert_eq!(context.file.get_ref().len(), chunk::CHUNK_SIZE * 6);
     for i in 2..5 {
-        let row_data_chunk = read_chunk_at(&mut context.file, i)?;
-        validate_node_sorted(row_data_chunk.row_data());
+        let data_chunk = chunk::read_chunk_at(&mut context.file, i)?;
+        validate_node_sorted(data_chunk.data());
     }
 
     Ok(())
 }
+
+/*
+#[test]
+fn insert_large_number_of_rows() -> Result<(), Error> {
+    let mut context = setup();
+    let mut index = Index::create(&mut context.file, context.schema.clone())?;
+
+    for i in 0..100000 {
+        let mut col_val = ColumnValue::new();
+        col_val.name = "Key".into();
+        col_val.set_int_value(i as i32);
+
+        let mut op = Insert::new();
+        op.index_name = "TestIndex".into();
+        op.column_values.push(col_val);
+
+        index.insert(op)?;
+    }
+
+    Ok(())
+}
+*/

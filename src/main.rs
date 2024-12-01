@@ -1,6 +1,7 @@
 #![allow(warnings)]
 
-mod chunk;
+mod file;
+
 mod error;
 mod index;
 mod protos;
@@ -20,7 +21,6 @@ use index::Index;
 
 use std::io::Read;
 
-use crate::chunk::*;
 use crate::error::*;
 
 #[derive(Parser, Debug)]

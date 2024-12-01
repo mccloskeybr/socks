@@ -37,7 +37,7 @@ fn transform_insert_op_success() -> Result<(), Error> {
     let transformed = transform_insert_op(op, &schema);
     assert_eq!(
         transformed,
-        parse_from_str::<InternalRow>("
+        parse_from_str::<InternalRowProto>("
             key: \"1.\"
             col_values {
                 int_value: 1

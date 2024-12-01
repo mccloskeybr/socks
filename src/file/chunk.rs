@@ -21,7 +21,7 @@ pub const CHUNK_SIZE: usize = 512;
 // cannot be determined without properly encoding it.
 // allowing some small buffer is (probably) more efficient than
 // computing the actual size every time? TODO test.
-pub const CHUNK_OVERFLOW_BUFFER: usize = 25;
+pub const CHUNK_OVERFLOW_BUFFER: usize = 10;
 
 fn read_data_update_cursor<'a>(
     src: &'a [u8; CHUNK_SIZE], size: usize, cursor: &mut usize)
@@ -36,14 +36,14 @@ fn read_data_update_cursor<'a>(
 }
 
 fn chunk_from_bytes(bytes: &[u8; CHUNK_SIZE])
--> Result<Chunk, Error> {
+-> Result<ChunkProto, Error> {
     let mut cursor: usize = 0;
 
     let slice = read_data_update_cursor(bytes, std::mem::size_of::<u16>(), &mut cursor)?;
     let chunk_size = u16::from_be_bytes(slice.try_into()?);
 
     let slice = read_data_update_cursor(bytes, chunk_size as usize, &mut cursor)?;
-    let chunk = Chunk::parse_from_bytes(&slice)?;
+    let chunk = ChunkProto::parse_from_bytes(&slice)?;
 
     Ok(chunk)
 }
@@ -61,7 +61,7 @@ fn write_data_update_cursor(
     Ok(())
 }
 
-fn chunk_to_bytes(chunk: &Chunk)
+fn chunk_to_bytes(chunk: &ChunkProto)
 -> Result<[u8; CHUNK_SIZE], Error> {
     let data: Vec<u8> = chunk.write_to_bytes()?;
     let data_len: u16 = data.len().try_into().unwrap();
@@ -75,7 +75,7 @@ fn chunk_to_bytes(chunk: &Chunk)
 }
 
 pub fn read_chunk_at<R: Read + Seek>(reader: &mut R, chunk_offset: u32)
--> Result<Chunk, Error> {
+-> Result<ChunkProto, Error> {
     let mut chunk_bytes: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
     reader.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
     reader.read(&mut chunk_bytes)?;
@@ -83,7 +83,7 @@ pub fn read_chunk_at<R: Read + Seek>(reader: &mut R, chunk_offset: u32)
 }
 
 
-pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &Chunk, chunk_offset: u32)
+pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &ChunkProto, chunk_offset: u32)
 -> Result<(), Error> {
     let chunk_bytes: [u8; CHUNK_SIZE] = chunk_to_bytes(chunk)?;
     writer.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
@@ -92,7 +92,7 @@ pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &Chunk, chunk_offs
     Ok(())
 }
 
-pub fn would_chunk_overflow<M: Message>(chunk: &Chunk, msg: &M)
+pub fn would_chunk_overflow<M: Message>(chunk: &ChunkProto, msg: &M)
 -> bool {
     let size_estimate =
         std::mem::size_of::<u16>() +
@@ -100,13 +100,4 @@ pub fn would_chunk_overflow<M: Message>(chunk: &Chunk, msg: &M)
         msg.compute_size() as usize +
         CHUNK_OVERFLOW_BUFFER;
     CHUNK_SIZE <= size_estimate
-}
-
-pub fn is_leaf_node(row_data: &RowDataNode) -> bool {
-    for val in &row_data.values {
-        if val.has_child_id() {
-            return false;
-        }
-    }
-    true
 }

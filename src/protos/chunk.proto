@@ -2,15 +2,15 @@ syntax = "proto3";
 
 import "schema.proto";
 
-message Chunk {
+message ChunkProto {
   oneof chunk_type {
-    Metadata metadata = 2;
-    Directory directory = 3;
-    RowDataNode row_data = 4;
+    MetadataProto metadata = 2;
+    DirectoryProto directory = 3;
+    DataProto data = 4;
   }
 }
 
-message Metadata {
+message MetadataProto {
   uint32 next_chunk_id = 1;
   uint32 next_chunk_offset = 2;
   IndexSchema schema = 3;
@@ -18,7 +18,7 @@ message Metadata {
   uint32 num_directories = 5;
 }
 
-message Directory {
+message DirectoryProto {
   // NOTE: use fixed32 so updating the offset of an existing entry
   // won't cause the directory to suddenly exceed the chunk size.
   // TODO: play with other options.
@@ -29,23 +29,23 @@ message Directory {
   repeated Entry entries = 1;
 }
 
-message RowDataNode {
+message DataProto {
   uint32 id = 1;
   message Value {
     oneof node_type {
-      InternalRow row_node = 1;
+      InternalRowProto row_node = 1;
       uint32 child_id = 2;
     }
   }
   repeated Value values = 2;
 }
 
-message InternalRow {
+message InternalRowProto {
   string key = 1;
-  repeated InternalColumn col_values = 2;
+  repeated InternalColumnProto col_values = 2;
 }
 
-message InternalColumn {
+message InternalColumnProto {
   oneof value {
     bool is_empty = 1;
     int32 int_value = 2;

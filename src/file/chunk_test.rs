@@ -1,4 +1,4 @@
-use crate::chunk::*;
+use crate::file::chunk::*;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use protobuf::text_format::parse_from_str;
@@ -18,7 +18,7 @@ fn setup() -> TestContext {
 fn read_write_single_chunk() -> Result<(), Error> {
     let mut context = setup();
 
-    let mut chunk_in = Chunk::new();
+    let mut chunk_in = ChunkProto::new();
     chunk_in.mut_metadata().next_chunk_id = 1;
     write_chunk_at(&mut context.file, &chunk_in, 0)?;
     assert_eq!(context.file.get_ref().len(), CHUNK_SIZE);
@@ -33,9 +33,9 @@ fn read_write_single_chunk() -> Result<(), Error> {
 fn read_write_many_chunks() -> Result<(), Error> {
     let mut context = setup();
     let n = 5;
-    let mut chunks: Vec<Chunk> = Vec::new();
+    let mut chunks: Vec<ChunkProto> = Vec::new();
     for i in 0..n {
-        let mut chunk = Chunk::new();
+        let mut chunk = ChunkProto::new();
         chunk.mut_metadata().next_chunk_id = i;
         chunks.push(chunk);
     }
@@ -57,12 +57,12 @@ fn read_write_many_chunks() -> Result<(), Error> {
 fn overwrite_chunk() -> Result<(), Error> {
     let mut context = setup();
 
-    let mut chunk_1 = Chunk::new();
+    let mut chunk_1 = ChunkProto::new();
     chunk_1.mut_metadata().next_chunk_id = 1;
     write_chunk_at(&mut context.file, &chunk_1, 0)?;
     assert_eq!(context.file.get_ref().len(), CHUNK_SIZE);
 
-    let mut chunk_2 = Chunk::new();
+    let mut chunk_2 = ChunkProto::new();
     chunk_2.mut_metadata().next_chunk_id = 2;
     write_chunk_at(&mut context.file, &chunk_2, 0)?;
     assert_eq!(context.file.get_ref().len(), CHUNK_SIZE);
@@ -77,10 +77,10 @@ fn overwrite_chunk() -> Result<(), Error> {
 fn huge_chunk_fails_write() -> Result<(), Error> {
     let mut context = setup();
 
-    let mut chunk = Chunk::new();
+    let mut chunk = ChunkProto::new();
     let dir = chunk.mut_directory();
     for i in 0..CHUNK_SIZE {
-        let mut entry = directory::Entry::new();
+        let mut entry = directory_proto::Entry::new();
         entry.id = std::u32::MAX;
         entry.offset = std::u32::MAX;
         dir.entries.push(entry);
@@ -94,8 +94,8 @@ fn huge_chunk_fails_write() -> Result<(), Error> {
 
 #[test]
 fn would_chunk_overflow_false() -> Result<(), Error> {
-    let chunk = Chunk::new();
-    let mut row = InternalRow::new();
+    let chunk = ChunkProto::new();
+    let mut row = InternalRowProto::new();
     row.key = "key".into();
     assert!(!would_chunk_overflow(&chunk, &row));
     Ok(())
@@ -103,50 +103,14 @@ fn would_chunk_overflow_false() -> Result<(), Error> {
 
 #[test]
 fn would_chunk_overflow_true() -> Result<(), Error> {
-    let mut chunk = Chunk::new();
+    let mut chunk = ChunkProto::new();
     for i in 0..CHUNK_SIZE {
-        let mut val = row_data_node::Value::new();
+        let mut val = data_proto::Value::new();
         val.mut_row_node().key = "key".into();
-        chunk.mut_row_data().values.push(val);
+        chunk.mut_data().values.push(val);
     }
-    let mut row = InternalRow::new();
+    let mut row = InternalRowProto::new();
     row.key = "key".into();
     assert!(would_chunk_overflow(&chunk, &row));
-    Ok(())
-}
-
-#[test]
-fn is_leaf_node_true() -> Result<(), Error> {
-    let chunk = parse_from_str::<RowDataNode>("
-            id: 0
-            values {
-                row_node {
-                    key: \"key\"
-                    col_values { int_value: 1 }
-                }
-            }
-            values {
-                row_node {
-                    key: \"key\"
-                    col_values { int_value: 2 }
-                }
-            }")?;
-    assert!(is_leaf_node(&chunk));
-    Ok(())
-}
-
-#[test]
-fn is_leaf_node_false() -> Result<(), Error> {
-    let chunk = parse_from_str::<RowDataNode>("
-            id: 0
-            values { child_id: 1 }
-            values {
-                row_node {
-                    key: \"key\"
-                    col_values { int_value: 2 }
-                }
-            }
-            values { child_id: 2 }")?;
-    assert!(!is_leaf_node(&chunk));
     Ok(())
 }
