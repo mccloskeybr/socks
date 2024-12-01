@@ -31,6 +31,8 @@ message DirectoryProto {
 
 message DataProto {
   uint32 id = 1;
+  // TODO: SOA for better cache coherency in large chunks.
+  // have a list of keys separate from row data.
   message Value {
     oneof node_type {
       InternalRowProto row_node = 1;
