@@ -6,14 +6,14 @@ use crate::error::*;
 use crate::parse::*;
 use crate::file::*;
 use crate::protos::generated::operations::*;
-use crate::protos::generated::schema::*;
+use crate::protos::generated::config::*;
 use crate::protos::generated::chunk::*;
 
 fn insert_non_full<F: Read + Write + Seek>(
     index: &mut Index<F>, node_chunk: &mut ChunkProto, row: InternalRowProto)
 -> Result<(), Error> {
     debug_assert!(node_chunk.has_data());
-    debug_assert!(!chunk::would_chunk_overflow(node_chunk, &row));
+    debug_assert!(!chunk::would_chunk_overflow(&index.db_config.file, node_chunk, &row));
     let node: &mut DataProto = node_chunk.mut_data();
 
     // find the first value less than row
@@ -42,7 +42,7 @@ fn insert_non_full<F: Read + Write + Seek>(
         let mut child_chunk = row_data::find_chunk(index, node.values[child_idx].child_id())?;
         debug_assert!(child_chunk.has_data());
 
-        if chunk::would_chunk_overflow(&child_chunk, &row) {
+        if chunk::would_chunk_overflow(&index.db_config.file, &child_chunk, &row) {
             // [.., ref, ..] --> [.., ref < val, val, ref > val, .. ]
             split_child(index, node_chunk, &mut child_chunk, child_idx)?;
 
@@ -105,7 +105,7 @@ pub fn insert<F: Read + Write + Seek>(
     let mut root_chunk = row_data::find_chunk(index, index.metadata.root_chunk_id)?;
     debug_assert!(root_chunk.has_data());
 
-    if chunk::would_chunk_overflow(&root_chunk, &row) {
+    if chunk::would_chunk_overflow(&index.db_config.file, &root_chunk, &row) {
         log::trace!("Root overflow detected.");
 
         // TODO: this is inefficient.

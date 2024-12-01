@@ -7,25 +7,14 @@ use protobuf::Message;
 use crate::stats;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
+use crate::protos::generated::config::*;
 
 // Byte format of each chunk is the following:
 // 1. data size: u16 / 4 bytes.
 // 2. data: [u8] ChunkProto to end of section.
-// Each section is guaranteed to be of size CHUNK_SIZE.
+// Each section is guaranteed to be of a configurable static size.
 
-// NOTE: the maximum size of each chunk on disk.
-// TODO: make configurable.
-pub const CHUNK_SIZE: usize = 512;
-
-// NOTE: the amount of space remaining to consider a chunk as full.
-// required because protos are sized dynamically and true length
-// cannot be determined without properly encoding it.
-// allowing some small buffer is (probably) more efficient than
-// computing the actual size every time? TODO test.
-pub const CHUNK_OVERFLOW_BUFFER: usize = 10;
-
-fn read_data_update_cursor<'a>(
-    src: &'a [u8; CHUNK_SIZE], size: usize, cursor: &mut usize)
+fn read_data_update_cursor<'a>(src: &'a [u8], size: usize, cursor: &mut usize)
 -> Result<&'a [u8], Error> {
     let Some(slice) = src.get(*cursor .. *cursor + size) else {
         return Err(Error::OutOfBounds(format!(
@@ -36,8 +25,7 @@ fn read_data_update_cursor<'a>(
     Ok(slice)
 }
 
-fn chunk_from_bytes(bytes: &[u8; CHUNK_SIZE])
--> Result<ChunkProto, Error> {
+fn chunk_from_bytes(bytes: &[u8]) -> Result<ChunkProto, Error> {
     let mut cursor: usize = 0;
 
     let slice = read_data_update_cursor(bytes, std::mem::size_of::<u16>(), &mut cursor)?;
@@ -49,8 +37,7 @@ fn chunk_from_bytes(bytes: &[u8; CHUNK_SIZE])
     Ok(chunk)
 }
 
-fn write_data_update_cursor(
-    src: &[u8], dest: &mut [u8; CHUNK_SIZE], cursor: &mut usize)
+fn write_data_update_cursor(src: &[u8], dest: &mut Vec<u8>, cursor: &mut usize)
 -> Result<(), Error> {
     let Some(slice) = dest.get_mut(*cursor .. *cursor + src.len()) else {
         return Err(Error::OutOfBounds(format!(
@@ -62,45 +49,49 @@ fn write_data_update_cursor(
     Ok(())
 }
 
-fn chunk_to_bytes(chunk: &ChunkProto)
--> Result<[u8; CHUNK_SIZE], Error> {
+fn chunk_to_bytes(config: &FileConfig, chunk: &ChunkProto)
+-> Result<Vec<u8>, Error> {
     let data: Vec<u8> = chunk.write_to_bytes()?;
     let data_len: u16 = data.len().try_into().unwrap();
 
-    let mut chunk = [0; CHUNK_SIZE];
+    let mut bytes = Vec::with_capacity(config.chunk_size as usize);
+    bytes.resize_with(config.chunk_size as usize, || 0);
     let mut cursor: usize = 0;
-    write_data_update_cursor(&data_len.to_be_bytes(), &mut chunk, &mut cursor)?;
-    write_data_update_cursor(&data, &mut chunk, &mut cursor)?;
+    write_data_update_cursor(&data_len.to_be_bytes(), &mut bytes, &mut cursor)?;
+    write_data_update_cursor(&data, &mut bytes, &mut cursor)?;
 
-    Ok(chunk)
+    Ok(bytes)
 }
 
-pub fn read_chunk_at<R: Read + Seek>(reader: &mut R, chunk_offset: u32)
+pub fn read_chunk_at<R: Read + Seek>(config: &FileConfig, reader: &mut R, chunk_offset: u32)
 -> Result<ChunkProto, Error> {
-    let mut chunk_bytes: [u8; CHUNK_SIZE] = [0; CHUNK_SIZE];
-    reader.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
-    reader.read(&mut chunk_bytes)?;
+    let mut bytes: Vec<u8> = Vec::with_capacity(config.chunk_size as usize);
+    bytes.resize_with(config.chunk_size as usize, || 0);
+    reader.seek(SeekFrom::Start(chunk_offset as u64 * config.chunk_size as u64))?;
+    reader.read(&mut bytes)?;
     stats::increment_chunk_read();
-    chunk_from_bytes(&chunk_bytes)
+    chunk_from_bytes(&bytes)
 }
 
 
-pub fn write_chunk_at<W: Write + Seek>(writer: &mut W, chunk: &ChunkProto, chunk_offset: u32)
+pub fn write_chunk_at<W: Write + Seek>(
+    config: &FileConfig, writer: &mut W, chunk: &ChunkProto, chunk_offset: u32)
 -> Result<(), Error> {
-    let chunk_bytes: [u8; CHUNK_SIZE] = chunk_to_bytes(chunk)?;
-    writer.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
-    writer.write(&chunk_bytes)?;
+    let bytes: Vec<u8> = chunk_to_bytes(config, chunk)?;
+    writer.seek(SeekFrom::Start(chunk_offset as u64 * config.chunk_size as u64))?;
+    writer.write(&bytes)?;
     writer.flush()?;
     stats::increment_chunk_write();
     Ok(())
 }
 
-pub fn would_chunk_overflow<M: Message>(chunk: &ChunkProto, msg: &M)
+pub fn would_chunk_overflow<M: Message>(
+    config: &FileConfig, chunk: &ChunkProto, msg: &M)
 -> bool {
     let size_estimate =
         std::mem::size_of::<u16>() +
         chunk.compute_size() as usize +
         msg.compute_size() as usize +
-        CHUNK_OVERFLOW_BUFFER;
-    CHUNK_SIZE <= size_estimate
+        config.chunk_overflow_size as usize;
+    config.chunk_size <= size_estimate.try_into().unwrap()
 }

@@ -1,7 +1,7 @@
 use crate::error::*;
 use crate::parse::transform::*;
 use crate::protos::generated::operations::*;
-use crate::protos::generated::schema::*;
+use crate::protos::generated::config::*;
 use crate::protos::generated::chunk::*;
 use protobuf::text_format::parse_from_str;
 

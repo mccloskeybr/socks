@@ -20,6 +20,6 @@ pub fn commit_metadata<F: Read + Write + Seek>(index: &mut Index<F>) -> Result<(
     log::trace!("Committing metadata.");
     let mut metadata_chunk = ChunkProto::new();
     metadata_chunk.set_metadata(index.metadata.clone());
-    chunk::write_chunk_at::<F>(&mut index.file, &metadata_chunk, 0)?;
+    chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, &metadata_chunk, 0)?;
     Ok(())
 }

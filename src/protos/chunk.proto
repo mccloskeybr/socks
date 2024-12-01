@@ -1,21 +1,21 @@
 syntax = "proto3";
 
-import "schema.proto";
+import "config.proto";
 
 message ChunkProto {
   oneof chunk_type {
-    MetadataProto metadata = 2;
+    IndexMetadataProto metadata = 2;
     DirectoryProto directory = 3;
     DataProto data = 4;
   }
 }
 
-message MetadataProto {
-  uint32 next_chunk_id = 1;
-  uint32 next_chunk_offset = 2;
-  IndexSchema schema = 3;
-  uint32 root_chunk_id = 4;
-  uint32 num_directories = 5;
+message IndexMetadataProto {
+  IndexConfig config = 1;
+  uint32 root_chunk_id = 2;
+  uint32 num_directories = 3;
+  uint32 next_chunk_id = 4;
+  uint32 next_chunk_offset = 5;
 }
 
 message DirectoryProto {

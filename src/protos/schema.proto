@@ -1,20 +1,2 @@
 syntax = "proto3";
 
-message ColumnSchema {
-  string name = 1;
-  enum Type {
-    UNDEFINED = 0;
-    INTEGER = 1;
-  }
-  Type type = 2;
-  bool is_key = 3;
-}
-
-message IndexSchema {
-  string name = 1;
-  repeated ColumnSchema columns = 2;
-}
-
-message DatabaseSchema {
-  IndexSchema index = 1;
-}

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 use crate::error::*;
-use crate::protos::generated::schema::*;
+use crate::protos::generated::config::*;
 
 fn table_has_name(schema: &IndexSchema)
 -> Result<(), Error> {

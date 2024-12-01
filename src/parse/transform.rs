@@ -3,7 +3,7 @@
 mod test;
 
 use crate::protos::generated::operations::*;
-use crate::protos::generated::schema::*;
+use crate::protos::generated::config::*;
 use crate::protos::generated::chunk::*;
 
 fn get_col_value_as_string(col_val: &ColumnValueProto) -> String {

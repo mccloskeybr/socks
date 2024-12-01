@@ -12,7 +12,8 @@ fn find_directory_entry<F: Read + Write + Seek>(index: &mut Index<F>, id: u32)
 -> Result<(u32, *mut directory_proto::Entry, ChunkProto), Error> {
     for i in 0..index.metadata.num_directories {
         let dir_chunk_offset = i + 1;
-        let mut dir_chunk = chunk::read_chunk_at::<F>(&mut index.file, dir_chunk_offset)?;
+        let mut dir_chunk = chunk::read_chunk_at::<F>(
+            &index.db_config.file, &mut index.file, dir_chunk_offset)?;
         if !dir_chunk.has_directory() {
             return Err(Error::Internal(format!(
                         "Chunk with offset: {} is not a directory!",
@@ -35,7 +36,7 @@ pub fn find_chunk_offset<F: Read + Write + Seek>(index: &mut Index<F>, id: u32) 
 pub fn update_chunk_offset<F: Read + Write + Seek>(index: &mut Index<F>, id: u32, offset: u32) -> Result<(), Error> {
     let (chunk_offset, entry, chunk) = find_directory_entry::<F>(index, id)?;
     unsafe { (*entry).offset = offset };
-    chunk::write_chunk_at::<F>(&mut index.file, &chunk, chunk_offset)?;
+    chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, &chunk, chunk_offset)?;
     Ok(())
 }
 
@@ -51,13 +52,15 @@ pub fn create_directory_entry<F: Read + Write + Seek>(index: &mut Index<F>, id: 
     let mut dir_chunk: Option<(ChunkProto, u32)> = None;
     for i in (0..index.metadata.num_directories).rev() {
         let dir_chunk_offset = i + 1;
-        let mut test_dir_chunk = chunk::read_chunk_at::<F>(&mut index.file, dir_chunk_offset)?;
+        let mut test_dir_chunk = chunk::read_chunk_at::<F>(
+            &index.db_config.file, &mut index.file, dir_chunk_offset)?;
         if !test_dir_chunk.has_directory() {
             return Err(Error::Internal(format!(
                         "Chunk with offset: {} is not a directory!",
                         dir_chunk_offset).into()));
         }
-        if !chunk::would_chunk_overflow(&test_dir_chunk, &dir_entry) {
+        if !chunk::would_chunk_overflow(
+                &index.db_config.file, &test_dir_chunk, &dir_entry) {
             dir_chunk = Some((test_dir_chunk, dir_chunk_offset));
             break;
         }
@@ -66,7 +69,7 @@ pub fn create_directory_entry<F: Read + Write + Seek>(index: &mut Index<F>, id: 
     if let Some((mut dir_chunk, dir_chunk_offset)) = dir_chunk {
         log::trace!("Found a directory with existing space: {}", dir_chunk_offset);
         dir_chunk.mut_directory().entries.push(dir_entry);
-        chunk::write_chunk_at::<F>(&mut index.file, &dir_chunk, dir_chunk_offset)?;
+        chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, &dir_chunk, dir_chunk_offset)?;
     }
     else {
         log::trace!("No directory with space available, creating a new one.");
@@ -76,13 +79,14 @@ pub fn create_directory_entry<F: Read + Write + Seek>(index: &mut Index<F>, id: 
 
         let new_dir_offset = 1 + index.metadata.num_directories;
         let swap_chunk_offset = index.metadata.next_chunk_offset;
-        let swap_chunk = chunk::read_chunk_at::<F>(&mut index.file, new_dir_offset)?;
+        let swap_chunk = chunk::read_chunk_at::<F>(
+            &index.db_config.file, &mut index.file, new_dir_offset)?;
         debug_assert!(swap_chunk.has_data());
-        chunk::write_chunk_at::<F>(&mut index.file, &swap_chunk, swap_chunk_offset)?;
+        chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, &swap_chunk, swap_chunk_offset)?;
         index.metadata.next_chunk_offset += 1;
         directory::update_chunk_offset(index, swap_chunk.data().id, swap_chunk_offset)?;
 
-        chunk::write_chunk_at::<F>(&mut index.file, &new_dir_chunk, new_dir_offset)?;
+        chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, &new_dir_chunk, new_dir_offset)?;
         index.metadata.num_directories += 1;
     }
 

@@ -19,7 +19,7 @@ pub fn is_leaf_node(data: &DataProto) -> bool {
 
 pub fn find_chunk<F: Read + Write + Seek>(index: &mut Index<F>, id: u32) -> Result<ChunkProto, Error> {
     let offset = directory::find_chunk_offset(index, id)?;
-    chunk::read_chunk_at::<F>(&mut index.file, offset)
+    chunk::read_chunk_at::<F>(&index.db_config.file, &mut index.file, offset)
 }
 
 pub fn commit_chunk<F: Read + Write + Seek>(index: &mut Index<F>, chunk: &ChunkProto) -> Result<(), Error> {
@@ -27,11 +27,11 @@ pub fn commit_chunk<F: Read + Write + Seek>(index: &mut Index<F>, chunk: &ChunkP
     log::trace!("Committing chunk: {}.", chunk.data().id);
     match directory::find_chunk_offset(index, chunk.data().id) {
         Ok(chunk_offset) => {
-            chunk::write_chunk_at::<F>(&mut index.file, chunk, chunk_offset)?;
+            chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, chunk, chunk_offset)?;
         }
         Err(Error::NotFound(..)) => {
             let offset = metadata::next_chunk_offset(index);
-            chunk::write_chunk_at::<F>(&mut index.file, chunk, offset)?;
+            chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, chunk, offset)?;
             directory::create_directory_entry(index, chunk.data().id, offset)?;
         },
         Err(e) => { Err(e)? },
