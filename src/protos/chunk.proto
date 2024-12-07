@@ -4,9 +4,9 @@ import "config.proto";
 
 message ChunkProto {
   oneof chunk_type {
-    IndexMetadataProto metadata = 2;
-    DirectoryProto directory = 3;
-    DataProto data = 4;
+    IndexMetadataProto metadata = 1;
+    DirectoryProto directory = 2;
+    NodeProto node = 3;
   }
 }
 
@@ -29,17 +29,27 @@ message DirectoryProto {
   repeated Entry entries = 1;
 }
 
-message DataProto {
+message NodeProto {
   uint32 id = 1;
-  // TODO: SOA for better cache coherency in large chunks.
-  // have a list of keys separate from row data.
+  oneof node_type {
+    InternalNodeProto internal = 2;
+    LeafNodeProto leaf = 3;
+  }
+}
+
+// TODO: pointers to siblings
+message InternalNodeProto {
   message Value {
-    oneof node_type {
-      InternalRowProto row_node = 1;
+    oneof value_type {
+      string key = 1;
       uint32 child_id = 2;
     }
   }
   repeated Value values = 2;
+}
+
+message LeafNodeProto {
+  repeated InternalRowProto rows = 3;
 }
 
 message InternalRowProto {
@@ -48,7 +58,7 @@ message InternalRowProto {
 }
 
 message InternalColumnProto {
-  oneof value {
+  oneof column_type {
     bool is_empty = 1;
     int32 int_value = 2;
   }

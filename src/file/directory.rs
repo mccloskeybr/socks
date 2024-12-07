@@ -3,6 +3,7 @@
 mod test;
 
 use std::io::{Read, Write, Seek};
+use protobuf::Message;
 use crate::index::*;
 use crate::error::*;
 use crate::file::*;
@@ -59,8 +60,8 @@ pub fn create_directory_entry<F: Read + Write + Seek>(index: &mut Index<F>, id: 
                         "Chunk with offset: {} is not a directory!",
                         dir_chunk_offset).into()));
         }
-        if !chunk::would_chunk_overflow(
-                &index.db_config.file, &test_dir_chunk, &dir_entry) {
+        if !chunk::would_chunk_overflow(&index.db_config.file,
+                                        test_dir_chunk.compute_size() as usize + dir_entry.compute_size() as usize) {
             dir_chunk = Some((test_dir_chunk, dir_chunk_offset));
             break;
         }
@@ -81,10 +82,10 @@ pub fn create_directory_entry<F: Read + Write + Seek>(index: &mut Index<F>, id: 
         let swap_chunk_offset = index.metadata.next_chunk_offset;
         let swap_chunk = chunk::read_chunk_at::<F>(
             &index.db_config.file, &mut index.file, new_dir_offset)?;
-        debug_assert!(swap_chunk.has_data());
+        debug_assert!(swap_chunk.has_node());
         chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, &swap_chunk, swap_chunk_offset)?;
         index.metadata.next_chunk_offset += 1;
-        directory::update_chunk_offset(index, swap_chunk.data().id, swap_chunk_offset)?;
+        directory::update_chunk_offset(index, swap_chunk.node().id, swap_chunk_offset)?;
 
         chunk::write_chunk_at::<F>(&index.db_config.file, &mut index.file, &new_dir_chunk, new_dir_offset)?;
         index.metadata.num_directories += 1;

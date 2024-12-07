@@ -5,7 +5,7 @@ A small relational database engine written in rust, primarily for education purp
 Current feature set (12/1/2024):
 - Support for a primary index only.
 - Support retrieval of rows given a full key match.
-- B-tree file format.
+- B+-tree file format.
 
 Planned features:
 - LRU cache.

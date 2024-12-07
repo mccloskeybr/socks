@@ -85,13 +85,8 @@ pub fn write_chunk_at<W: Write + Seek>(
     Ok(())
 }
 
-pub fn would_chunk_overflow<M: Message>(
-    config: &FileConfig, chunk: &ChunkProto, msg: &M)
+pub fn would_chunk_overflow(config: &FileConfig, size: usize)
 -> bool {
-    let size_estimate =
-        std::mem::size_of::<u16>() +
-        chunk.compute_size() as usize +
-        msg.compute_size() as usize +
-        config.chunk_overflow_size as usize;
+    let size_estimate = std::mem::size_of::<u16>() + size + config.chunk_overflow_size as usize;
     config.chunk_size <= size_estimate.try_into().unwrap()
 }

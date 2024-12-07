@@ -5,7 +5,7 @@ mod test;
 use std::io::{Read, Write, Seek};
 use protobuf::Message;
 use protobuf::MessageField;
-use crate::b_tree;
+use crate::bp_tree;
 use crate::error::*;
 use crate::parse::*;
 use crate::file::*;
@@ -52,8 +52,9 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
         }
         {
             let mut root_node_chunk = ChunkProto::new();
-            let root_node: &mut DataProto = root_node_chunk.mut_data();
+            let root_node: &mut NodeProto = root_node_chunk.mut_node();
             root_node.id = 0;
+            root_node.set_internal(InternalNodeProto::new());
             chunk::write_chunk_at::<F>(&db_config.file, file, &root_node_chunk, 2)?;
         }
 
@@ -66,17 +67,17 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
 
     pub fn insert(&mut self, op: InsertProto) -> Result<(), Error> {
         // TODO: validate op
-        let row: InternalRowProto = transform::insert_op(op, &self.metadata.config.schema);
+        let row = transform::insert_op(op, &self.metadata.config.schema);
         log::trace!("Inserting row: {row}");
 
         match self.metadata.config.insert_method.enum_value_or_default() {
-            index_config::InsertMethod::CORMEN_INSERT => b_tree::cormen_insert::insert(self, row),
+            index_config::InsertMethod::AGGRESSIVE_SPLIT => bp_tree::insert_aggressive_split::insert(self, row),
         }
     }
 
     pub fn read_row(&mut self, op: ReadRowProto) -> Result<InternalRowProto, Error> {
         // TODO: validate op
         let key: String = transform::read_row_op(op, &self.metadata.config.schema);
-        b_tree::read::read_row(self, self.metadata.root_chunk_id, key)
+        bp_tree::read::read_row(self, self.metadata.root_chunk_id, key)
     }
 }

@@ -19,7 +19,7 @@ message IndexConfig {
   /* required */ IndexSchema schema = 1;
 
   enum InsertMethod {
-    CORMEN_INSERT = 0;
+    AGGRESSIVE_SPLIT = 0;
   }
   InsertMethod insert_method = 2;
 }

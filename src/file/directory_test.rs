@@ -18,7 +18,7 @@ fn setup() -> TestContext {
     TestContext {
         file: std::io::Cursor::<Vec<u8>>::new(Vec::new()),
         index_config: parse_from_str::<IndexConfig>("
-            insert_method: CORMEN_INSERT
+            insert_method: AGGRESSIVE_SPLIT
             schema {
                 name: \"TestIndex\"
                 columns {
@@ -52,7 +52,7 @@ fn find_chunk_offset_success() -> Result<(), Error> {
 
     let arbitrary_data_chunk = chunk::read_chunk_at(
         &index.db_config.file, &mut index.file, 4)?;
-    let arbitrary_data_chunk_offset = directory::find_chunk_offset(&mut index, arbitrary_data_chunk.data().id)?;
+    let arbitrary_data_chunk_offset = directory::find_chunk_offset(&mut index, arbitrary_data_chunk.node().id)?;
     assert_eq!(arbitrary_data_chunk_offset, 4);
 
     Ok(())
