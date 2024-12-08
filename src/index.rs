@@ -2,23 +2,22 @@
 #[path = "./index_test.rs"]
 mod test;
 
-use std::io::{Read, Write, Seek};
-use protobuf::Message;
-use protobuf::MessageField;
 use crate::bp_tree;
 use crate::error::*;
-use crate::parse::*;
 use crate::file::*;
-use crate::protos::generated::operations::*;
-use crate::protos::generated::config::*;
+use crate::parse::*;
 use crate::protos::generated::chunk::*;
+use crate::protos::generated::config::*;
+use crate::protos::generated::operations::*;
+use crate::LANE_WIDTH;
+use protobuf::Message;
+use protobuf::MessageField;
+use std::io::{Read, Seek, Write};
 
 // Index file format:
 // Chunk 0:          Metadata chunk
 // Chunks 1 - n:     RowData directory chunks
 // Chunks n+1 - end: RowData chunks
-
-static LANE_WIDTH: usize = 16;
 
 pub struct Index<'a, F: 'a + Read + Write + Seek> {
     pub file: &'a mut F,
@@ -28,7 +27,9 @@ pub struct Index<'a, F: 'a + Read + Write + Seek> {
 
 impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
     pub fn create(
-        file: &'a mut F, db_config: DatabaseConfig, index_config: IndexConfig
+        file: &'a mut F,
+        db_config: DatabaseConfig,
+        index_config: IndexConfig,
     ) -> Result<Self, Error> {
         validate::schema(&index_config.schema)?;
 
@@ -82,6 +83,15 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
     pub fn read_row(&mut self, op: ReadRowProto) -> Result<InternalRowProto, Error> {
         // TODO: validate op
         let key: u32 = transform::read_row_op(op, &self.metadata.config.schema);
-        bp_tree::read::read_row::<LANE_WIDTH, F>(self, self.metadata.root_chunk_id, key)
+
+        match self.metadata.config.read_method.enum_value_or_default() {
+            index_config::ReadMethod::INCREMENTAL => {
+                return bp_tree::read_sequential::read_row::<LANE_WIDTH, F>(
+                    self,
+                    self.metadata.root_chunk_id,
+                    key,
+                );
+            }
+        }
     }
 }

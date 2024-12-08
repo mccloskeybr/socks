@@ -11,8 +11,7 @@ pub enum Error {
 impl std::error::Error for Error {}
 
 impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>)
-    -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::InvalidArgument(s) => write!(f, "{}", s),
             Error::NotFound(s) => write!(f, "{}", s),
@@ -26,25 +25,25 @@ impl std::fmt::Display for Error {
 }
 
 impl From<std::io::Error> for Error {
-    fn from(value: std::io::Error) -> Self{
+    fn from(value: std::io::Error) -> Self {
         Error::Other(Box::new(value))
     }
 }
 
 impl From<std::array::TryFromSliceError> for Error {
-    fn from(value: std::array::TryFromSliceError) -> Self{
+    fn from(value: std::array::TryFromSliceError) -> Self {
         Error::Other(Box::new(value))
     }
 }
 
 impl From<protobuf::Error> for Error {
-    fn from(value: protobuf::Error) -> Self{
+    fn from(value: protobuf::Error) -> Self {
         Error::Other(Box::new(value))
     }
 }
 
 impl From<protobuf::text_format::ParseError> for Error {
-    fn from(value: protobuf::text_format::ParseError) -> Self{
+    fn from(value: protobuf::text_format::ParseError) -> Self {
         Error::Other(Box::new(value))
     }
 }

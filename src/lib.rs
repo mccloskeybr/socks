@@ -1,6 +1,8 @@
 #![allow(warnings)]
 #![feature(portable_simd)]
 
+static LANE_WIDTH: usize = 16;
+
 extern crate self as socks;
 
 mod bp_tree;

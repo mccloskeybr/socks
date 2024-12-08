@@ -22,6 +22,11 @@ message IndexConfig {
     AGGRESSIVE_SPLIT = 0;
   }
   InsertMethod insert_method = 2;
+
+  enum ReadMethod {
+    INCREMENTAL = 0;
+  }
+  ReadMethod read_method = 3;
 }
 
 message FileConfig {

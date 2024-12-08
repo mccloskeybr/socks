@@ -1,8 +1,8 @@
-use std::io::{Read, Write, Seek};
-use crate::protos::generated::chunk::*;
 use crate::error::*;
-use crate::index::*;
 use crate::file::*;
+use crate::index::*;
+use crate::protos::generated::chunk::*;
+use std::io::{Read, Seek, Write};
 
 pub fn next_chunk_id<F: Read + Write + Seek>(index: &mut Index<F>) -> u32 {
     let id = index.metadata.next_chunk_id;

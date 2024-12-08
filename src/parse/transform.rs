@@ -2,10 +2,10 @@
 #[path = "./transform_test.rs"]
 mod test;
 
-use std::collections::hash_map::DefaultHasher;
-use crate::protos::generated::operations::*;
-use crate::protos::generated::config::*;
 use crate::protos::generated::chunk::*;
+use crate::protos::generated::config::*;
+use crate::protos::generated::operations::*;
+use std::collections::hash_map::DefaultHasher;
 
 fn get_col_value_as_u32(col_val: &ColumnValueProto) -> u32 {
     match col_val.value {
@@ -26,8 +26,7 @@ fn get_col_schema<'a>(schema: &'a IndexSchema, col_name: &String) -> &'a ColumnS
 // TODO: validate no duplicate columns
 // TODO: validate keys specified first
 // TODO: validate column value match b/w op and schema
-pub fn insert_op(validated_op: InsertProto, schema: &IndexSchema)
--> (u32, InternalRowProto) {
+pub fn insert_op(validated_op: InsertProto, schema: &IndexSchema) -> (u32, InternalRowProto) {
     let mut key = 0;
     let mut row = InternalRowProto::new();
     for col_val in &validated_op.column_values {

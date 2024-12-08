@@ -1,6 +1,6 @@
 # Socks DB
 
-A small relational database engine written in rust, primarily for education purposes. Not winning any awards, but ¯\_(ツ)_/¯.
+A small relational database engine written in rust, primarily for education purposes. Not winning any awards, but ¯\\_(ツ)_/¯.
 
 Current feature set (12/8/2024):
 - Support for a primary index only.

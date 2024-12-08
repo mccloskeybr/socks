@@ -1,10 +1,9 @@
 use std::sync::Mutex;
 
-static global_stats: Mutex<Stats> = Mutex::new(
-    Stats {
-        num_chunk_reads: 0,
-        num_chunk_writes: 0,
-    });
+static global_stats: Mutex<Stats> = Mutex::new(Stats {
+    num_chunk_reads: 0,
+    num_chunk_writes: 0,
+});
 
 #[derive(Debug)]
 struct Stats {

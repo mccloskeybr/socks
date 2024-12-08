@@ -1,5 +1,5 @@
-use crate::file::chunk::*;
 use crate::error::*;
+use crate::file::chunk::*;
 use crate::protos::generated::chunk::*;
 use protobuf::text_format::parse_from_str;
 
@@ -12,9 +12,12 @@ fn setup() -> TestContext {
     let _ = env_logger::builder().is_test(true).try_init();
     TestContext {
         file: std::io::Cursor::<Vec<u8>>::new(Vec::new()),
-        config: parse_from_str::<FileConfig>("
+        config: parse_from_str::<FileConfig>(
+            "
             chunk_size: 512
-            chunk_overflow_size: 10").unwrap(),
+            chunk_overflow_size: 10",
+        )
+        .unwrap(),
     }
 }
 
@@ -25,7 +28,10 @@ fn read_write_single_chunk() -> Result<(), Error> {
     let mut chunk_in = ChunkProto::new();
     chunk_in.mut_metadata().next_chunk_id = 1;
     write_chunk_at(&context.config, &mut context.file, &chunk_in, 0)?;
-    assert_eq!(context.file.get_ref().len(), context.config.chunk_size as usize);
+    assert_eq!(
+        context.file.get_ref().len(),
+        context.config.chunk_size as usize
+    );
 
     let chunk_out = read_chunk_at(&context.config, &mut context.file, 0)?;
     assert_eq!(chunk_out, chunk_in);
@@ -47,7 +53,10 @@ fn read_write_many_chunks() -> Result<(), Error> {
     for i in 0..n {
         write_chunk_at(&context.config, &mut context.file, &chunks[i as usize], i)?;
     }
-    assert_eq!(context.file.get_ref().len(), (context.config.chunk_size * n) as usize);
+    assert_eq!(
+        context.file.get_ref().len(),
+        (context.config.chunk_size * n) as usize
+    );
 
     for i in 0..n {
         let chunk = read_chunk_at(&context.config, &mut context.file, i)?;
@@ -64,12 +73,18 @@ fn overwrite_chunk() -> Result<(), Error> {
     let mut chunk_1 = ChunkProto::new();
     chunk_1.mut_metadata().next_chunk_id = 1;
     write_chunk_at(&context.config, &mut context.file, &chunk_1, 0)?;
-    assert_eq!(context.file.get_ref().len(), context.config.chunk_size as usize);
+    assert_eq!(
+        context.file.get_ref().len(),
+        context.config.chunk_size as usize
+    );
 
     let mut chunk_2 = ChunkProto::new();
     chunk_2.mut_metadata().next_chunk_id = 2;
     write_chunk_at(&context.config, &mut context.file, &chunk_2, 0)?;
-    assert_eq!(context.file.get_ref().len(), context.config.chunk_size as usize);
+    assert_eq!(
+        context.file.get_ref().len(),
+        context.config.chunk_size as usize
+    );
 
     let chunk = read_chunk_at(&context.config, &mut context.file, 0)?;
     assert_eq!(chunk, chunk_2);
@@ -106,6 +121,9 @@ fn would_chunk_overflow_false() -> Result<(), Error> {
 #[test]
 fn would_chunk_overflow_true() -> Result<(), Error> {
     let mut context = setup();
-    assert!(would_chunk_overflow(&context.config, context.config.chunk_size as usize));
+    assert!(would_chunk_overflow(
+        &context.config,
+        context.config.chunk_size as usize
+    ));
     Ok(())
 }

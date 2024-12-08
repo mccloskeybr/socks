@@ -1,20 +1,25 @@
-use std::io::{Read, Write, Seek};
-use std::simd::{Simd, LaneCount, SupportedLaneCount};
-use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
+use crate::error::*;
+use crate::file::*;
+use crate::index::*;
+use crate::parse::*;
+use crate::protos::generated::chunk::*;
+use crate::protos::generated::config::*;
+use crate::protos::generated::operations::*;
 use protobuf::Message;
 use protobuf::MessageField;
-use crate::index::*;
-use crate::error::*;
-use crate::parse::*;
-use crate::file::*;
-use crate::protos::generated::operations::*;
-use crate::protos::generated::config::*;
-use crate::protos::generated::chunk::*;
+use std::io::{Read, Seek, Write};
+use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
+use std::simd::{LaneCount, Simd, SupportedLaneCount};
 
 fn insert_non_full_leaf<const N: usize, F: Read + Write + Seek>(
-    index: &mut Index<F>, node_chunk: &mut ChunkProto, key: u32, row: InternalRowProto)
--> Result<(), Error>
-where LaneCount<N>: SupportedLaneCount {
+    index: &mut Index<F>,
+    node_chunk: &mut ChunkProto,
+    key: u32,
+    row: InternalRowProto,
+) -> Result<(), Error>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
     debug_assert!(node_chunk.has_node());
     debug_assert!(node_chunk.node().has_leaf());
 
@@ -25,7 +30,10 @@ where LaneCount<N>: SupportedLaneCount {
         let test_keys = Simd::<u32, N>::load_or_default(chunk);
         let mask = keys.simd_lt(test_keys);
         match mask.first_set() {
-            Some(j) => { idx += j; break; },
+            Some(j) => {
+                idx += j;
+                break;
+            }
             None => {}
         }
         idx += chunk.len();
@@ -38,9 +46,14 @@ where LaneCount<N>: SupportedLaneCount {
 }
 
 fn insert_non_full_internal<const N: usize, F: Read + Write + Seek>(
-    index: &mut Index<F>, node_chunk: &mut ChunkProto, key: u32, row: InternalRowProto)
--> Result<(), Error>
-where LaneCount<N>: SupportedLaneCount {
+    index: &mut Index<F>,
+    node_chunk: &mut ChunkProto,
+    key: u32,
+    row: InternalRowProto,
+) -> Result<(), Error>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
     debug_assert!(node_chunk.has_node());
     debug_assert!(node_chunk.node().has_internal());
 
@@ -50,7 +63,10 @@ where LaneCount<N>: SupportedLaneCount {
         let test_keys = Simd::<u32, N>::load_or_default(chunk);
         let mask = keys.simd_lt(test_keys);
         match mask.first_set() {
-            Some(j) => { idx += j; break; },
+            Some(j) => {
+                idx += j;
+                break;
+            }
             None => {}
         }
         idx += chunk.len();
@@ -61,34 +77,39 @@ where LaneCount<N>: SupportedLaneCount {
     debug_assert!(child_chunk.has_node());
     match &child_chunk.mut_node().node_type {
         Some(node_proto::Node_type::Internal(_)) => {
-            if chunk::would_chunk_overflow(&index.db_config.file,
-                                           child_chunk.compute_size() as usize +
-                                           std::mem::size_of::<i32>()) {
+            if chunk::would_chunk_overflow(
+                &index.db_config.file,
+                child_chunk.compute_size() as usize + std::mem::size_of::<i32>(),
+            ) {
                 let right_child = split_child_internal(index, node_chunk, &mut child_chunk, idx)?;
                 if node_chunk.node().internal().keys[idx] < key {
                     child_chunk = right_child;
                 }
             }
             return insert_non_full_internal::<N, F>(index, &mut child_chunk, key, row);
-        },
+        }
         Some(node_proto::Node_type::Leaf(_)) => {
-            if chunk::would_chunk_overflow(&index.db_config.file,
-                                           child_chunk.compute_size() as usize + row.compute_size() as usize) {
+            if chunk::would_chunk_overflow(
+                &index.db_config.file,
+                child_chunk.compute_size() as usize + row.compute_size() as usize,
+            ) {
                 let right_child = split_child_leaf(index, node_chunk, &mut child_chunk, idx)?;
                 if node_chunk.node().internal().keys[idx] < key {
                     child_chunk = right_child;
                 }
             }
             return insert_non_full_leaf::<N, F>(index, &mut child_chunk, key, row);
-        },
+        }
         None => unreachable!(),
     }
 }
 
 fn split_child_leaf<F: Read + Write + Seek>(
-    index: &mut Index<F>, parent_chunk: &mut ChunkProto, left_child_chunk: &mut ChunkProto,
-    child_chunk_idx: usize)
--> Result<ChunkProto, Error> {
+    index: &mut Index<F>,
+    parent_chunk: &mut ChunkProto,
+    left_child_chunk: &mut ChunkProto,
+    child_chunk_idx: usize,
+) -> Result<ChunkProto, Error> {
     log::trace!("Splitting leaf node.");
     debug_assert!(parent_chunk.node().has_internal());
     debug_assert!(left_child_chunk.node().has_leaf());
@@ -103,7 +124,9 @@ fn split_child_leaf<F: Read + Write + Seek>(
     right_child.mut_leaf().keys = left_child.keys.split_off(split_idx);
     right_child.mut_leaf().rows = left_child.rows.split_off(split_idx);
 
-    parent.keys.insert(child_chunk_idx, right_child.leaf().keys[0]);
+    parent
+        .keys
+        .insert(child_chunk_idx, right_child.leaf().keys[0]);
     parent.child_ids.insert(child_chunk_idx + 1, right_child.id);
 
     row_data::commit_chunk(index, left_child_chunk)?;
@@ -114,9 +137,11 @@ fn split_child_leaf<F: Read + Write + Seek>(
 }
 
 fn split_child_internal<F: Read + Write + Seek>(
-    index: &mut Index<F>, parent_chunk: &mut ChunkProto, left_child_chunk: &mut ChunkProto,
-    child_chunk_idx: usize)
--> Result<ChunkProto, Error> {
+    index: &mut Index<F>,
+    parent_chunk: &mut ChunkProto,
+    left_child_chunk: &mut ChunkProto,
+    child_chunk_idx: usize,
+) -> Result<ChunkProto, Error> {
     log::trace!("Splitting internal node.");
     debug_assert!(parent_chunk.node().has_internal());
     debug_assert!(left_child_chunk.node().has_internal());
@@ -131,7 +156,9 @@ fn split_child_internal<F: Read + Write + Seek>(
     right_child.mut_internal().keys = left_child.keys.split_off(split_idx);
     right_child.mut_internal().child_ids = left_child.child_ids.split_off(split_idx);
 
-    parent.keys.insert(child_chunk_idx, left_child.keys[left_child.keys.len() - 1]);
+    parent
+        .keys
+        .insert(child_chunk_idx, left_child.keys[left_child.keys.len() - 1]);
     parent.child_ids.insert(child_chunk_idx + 1, right_child.id);
 
     row_data::commit_chunk(index, left_child_chunk)?;
@@ -144,14 +171,17 @@ fn split_child_internal<F: Read + Write + Seek>(
 // NOTE: https://www.geeksforgeeks.org/insertion-in-a-b-tree/
 // TODO: ensure key doesn't already exist
 pub fn insert<const N: usize, F: Read + Write + Seek>(
-    index: &mut Index<F>, key: u32, row: InternalRowProto)
--> Result<(), Error>
-where LaneCount<N>: SupportedLaneCount {
+    index: &mut Index<F>,
+    key: u32,
+    row: InternalRowProto,
+) -> Result<(), Error>
+where
+    LaneCount<N>: SupportedLaneCount,
+{
     let mut root_chunk = row_data::find_chunk(index, index.metadata.root_chunk_id)?;
     debug_assert!(root_chunk.node().has_internal());
 
-    if root_chunk.node().internal().keys.len() +
-        root_chunk.node().internal().child_ids.len() == 0 {
+    if root_chunk.node().internal().keys.len() + root_chunk.node().internal().child_ids.len() == 0 {
         log::trace!("Inserting first value.");
 
         let mut data_chunk = ChunkProto::new();
@@ -169,9 +199,10 @@ where LaneCount<N>: SupportedLaneCount {
         return Ok(());
     }
 
-    if chunk::would_chunk_overflow(&index.db_config.file,
-                                root_chunk.compute_size() as usize +
-                                std::mem::size_of::<i32>()) {
+    if chunk::would_chunk_overflow(
+        &index.db_config.file,
+        root_chunk.compute_size() as usize + std::mem::size_of::<i32>(),
+    ) {
         log::trace!("Root overflow detected.");
 
         // TODO: this is inefficient.
@@ -180,7 +211,11 @@ where LaneCount<N>: SupportedLaneCount {
 
         root_chunk.mut_node().mut_internal().keys.clear();
         root_chunk.mut_node().mut_internal().child_ids.clear();
-        root_chunk.mut_node().mut_internal().child_ids.push(child_chunk.node().id);
+        root_chunk
+            .mut_node()
+            .mut_internal()
+            .child_ids
+            .push(child_chunk.node().id);
 
         split_child_internal(index, &mut root_chunk, &mut child_chunk, 0)?;
     }

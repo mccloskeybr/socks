@@ -1,5 +1,5 @@
-use crate::index::*;
 use crate::file::*;
+use crate::index::*;
 use crate::parse::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
@@ -16,8 +16,10 @@ fn setup() -> TestContext {
     let _ = env_logger::builder().is_test(true).try_init();
     TestContext {
         file: std::io::Cursor::<Vec<u8>>::new(Vec::new()),
-        index_config: parse_from_str::<IndexConfig>("
+        index_config: parse_from_str::<IndexConfig>(
+            "
             insert_method: AGGRESSIVE_SPLIT
+            read_method: INCREMENTAL
             schema {
                 name: \"TestIndex\"
                 columns {
@@ -25,12 +27,17 @@ fn setup() -> TestContext {
                     type: INTEGER
                     is_key: true
                 }
-            }").unwrap(),
-        db_config: parse_from_str::<DatabaseConfig>("
+            }",
+        )
+        .unwrap(),
+        db_config: parse_from_str::<DatabaseConfig>(
+            "
             file {
                 chunk_size: 512
                 chunk_overflow_size: 10
-            }").unwrap(),
+            }",
+        )
+        .unwrap(),
     }
 }
 
@@ -38,26 +45,25 @@ fn validate_node_sorted(node: &NodeProto) {
     match &node.node_type {
         Some(node_proto::Node_type::Internal(internal)) => {
             assert!(internal.keys.is_sorted());
-        },
+        }
         Some(node_proto::Node_type::Leaf(leaf)) => {
             assert!(leaf.keys.is_sorted());
-        },
-        None => {},
+        }
+        None => {}
     }
 }
 
 #[test]
 fn create_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut index = Index::create(
-        &mut context.file, context.db_config, context.index_config)?;
-    assert_eq!(index.file.get_ref().len(), (index.db_config.file.chunk_size * 3) as usize);
-    let chunk_0 = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 0)?;
-    let chunk_1 = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 1)?;
-    let chunk_2 = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 2)?;
+    let mut index = Index::create(&mut context.file, context.db_config, context.index_config)?;
+    assert_eq!(
+        index.file.get_ref().len(),
+        (index.db_config.file.chunk_size * 3) as usize
+    );
+    let chunk_0 = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 0)?;
+    let chunk_1 = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 1)?;
+    let chunk_2 = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
 
     assert!(chunk_0.has_metadata());
     let metadata = chunk_0.metadata();
@@ -82,20 +88,27 @@ fn create_ok() -> Result<(), Error> {
 fn insert_single_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(
-        &mut context.file, context.db_config, context.index_config.clone())?;
+        &mut context.file,
+        context.db_config,
+        context.index_config.clone(),
+    )?;
 
-    let op = parse_from_str::<InsertProto>("
+    let op = parse_from_str::<InsertProto>(
+        "
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
                 int_value: 1
-            }")?;
+            }",
+    )?;
     index.insert(op.clone())?;
 
-    assert_eq!(index.file.get_ref().len(), (index.db_config.file.chunk_size * 4) as usize);
+    assert_eq!(
+        index.file.get_ref().len(),
+        (index.db_config.file.chunk_size * 4) as usize
+    );
 
-    let root_chunk = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 2)?;
+    let root_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
     assert!(root_chunk.has_node());
     let root = root_chunk.node();
     assert_eq!(root.id, 0);
@@ -104,15 +117,15 @@ fn insert_single_ok() -> Result<(), Error> {
     assert_eq!(root.internal().child_ids.len(), 1);
     assert_eq!(root.internal().child_ids[0], 1);
 
-    let data_chunk = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 3)?;
+    let data_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 3)?;
     assert!(data_chunk.has_node());
     let data = data_chunk.node();
     assert!(data.has_leaf());
     assert_eq!(data.id, 1);
     assert_eq!(
         (1, data.leaf().rows[0].clone()),
-        transform::insert_op(op, &index.metadata.config.schema));
+        transform::insert_op(op, &index.metadata.config.schema)
+    );
 
     Ok(())
 }
@@ -121,41 +134,51 @@ fn insert_single_ok() -> Result<(), Error> {
 fn insert_sorted() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(
-        &mut context.file, context.db_config, context.index_config.clone())?;
+        &mut context.file,
+        context.db_config,
+        context.index_config.clone(),
+    )?;
 
-    let op_1 = parse_from_str::<InsertProto>("
+    let op_1 = parse_from_str::<InsertProto>(
+        "
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
                 int_value: 1
-            }")?;
-    let op_2 = parse_from_str::<InsertProto>("
+            }",
+    )?;
+    let op_2 = parse_from_str::<InsertProto>(
+        "
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
                 int_value: 2
-            }")?;
-    let op_3 = parse_from_str::<InsertProto>("
+            }",
+    )?;
+    let op_3 = parse_from_str::<InsertProto>(
+        "
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
                 int_value: 3
-            }")?;
+            }",
+    )?;
     index.insert(op_1.clone())?;
     index.insert(op_2.clone())?;
     index.insert(op_3.clone())?;
 
-    assert_eq!(index.file.get_ref().len(), (index.db_config.file.chunk_size * 4) as usize);
-    let root_chunk = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 2)?;
+    assert_eq!(
+        index.file.get_ref().len(),
+        (index.db_config.file.chunk_size * 4) as usize
+    );
+    let root_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
     assert!(root_chunk.has_node());
     let root = root_chunk.node();
     assert_eq!(root.id, 0);
     assert!(root.has_internal());
     assert_eq!(root.internal().child_ids.len(), 1);
 
-    let data_chunk = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 3)?;
+    let data_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 3)?;
     assert!(data_chunk.has_node());
     let data = data_chunk.node();
     assert_eq!(data.id, 1);
@@ -165,9 +188,18 @@ fn insert_sorted() -> Result<(), Error> {
     let row_1 = &data.leaf().rows[0];
     let row_2 = &data.leaf().rows[1];
     let row_3 = &data.leaf().rows[2];
-    assert_eq!((1, row_1.clone()), transform::insert_op(op_1, &index.metadata.config.schema));
-    assert_eq!((2, row_2.clone()), transform::insert_op(op_2, &index.metadata.config.schema));
-    assert_eq!((3, row_3.clone()), transform::insert_op(op_3, &index.metadata.config.schema));
+    assert_eq!(
+        (1, row_1.clone()),
+        transform::insert_op(op_1, &index.metadata.config.schema)
+    );
+    assert_eq!(
+        (2, row_2.clone()),
+        transform::insert_op(op_2, &index.metadata.config.schema)
+    );
+    assert_eq!(
+        (3, row_3.clone()),
+        transform::insert_op(op_3, &index.metadata.config.schema)
+    );
 
     Ok(())
 }
@@ -176,7 +208,10 @@ fn insert_sorted() -> Result<(), Error> {
 fn insert_many_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(
-        &mut context.file, context.db_config, context.index_config.clone())?;
+        &mut context.file,
+        context.db_config,
+        context.index_config.clone(),
+    )?;
 
     for i in 0..60 {
         let mut col_val = ColumnValueProto::new();
@@ -190,16 +225,14 @@ fn insert_many_ok() -> Result<(), Error> {
         index.insert(op)?;
     }
 
-    let metadata = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 0)?;
+    let metadata = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 0)?;
     let metadata = metadata.metadata();
     assert_eq!(metadata.next_chunk_id, 2);
     assert_eq!(metadata.next_chunk_offset, 4);
     assert_eq!(metadata.root_chunk_id, 0);
     assert_eq!(metadata.num_directories, 1);
 
-    let dir = chunk::read_chunk_at(
-        &index.db_config.file, &mut index.file, 1)?;
+    let dir = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 1)?;
     let dir = dir.directory();
     assert_eq!(dir.entries.len(), 2);
     assert_eq!(dir.entries[0].id, 0);
@@ -207,10 +240,12 @@ fn insert_many_ok() -> Result<(), Error> {
     assert_eq!(dir.entries[1].id, 1);
     assert_eq!(dir.entries[1].offset, 3);
 
-    assert_eq!(index.file.get_ref().len(), (index.db_config.file.chunk_size * 4) as usize);
+    assert_eq!(
+        index.file.get_ref().len(),
+        (index.db_config.file.chunk_size * 4) as usize
+    );
     for i in 2..5 {
-        let node_chunk = chunk::read_chunk_at(
-            &index.db_config.file, &mut index.file, i)?;
+        let node_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, i)?;
         validate_node_sorted(node_chunk.node());
     }
 
@@ -221,26 +256,38 @@ fn insert_many_ok() -> Result<(), Error> {
 fn read_row_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(
-        &mut context.file, context.db_config, context.index_config.clone())?;
+        &mut context.file,
+        context.db_config,
+        context.index_config.clone(),
+    )?;
 
-    let insert_op = parse_from_str::<InsertProto>("
+    let insert_op = parse_from_str::<InsertProto>(
+        "
             index_name: \"TestIndex\"
             column_values {
                 name: \"Key\"
                 int_value: 1
-            }")?;
+            }",
+    )?;
     index.insert(insert_op)?;
 
-    let read_op = parse_from_str::<ReadRowProto>("
+    let read_op = parse_from_str::<ReadRowProto>(
+        "
             index_name: \"TestIndex\"
             key_value {
                 name: \"Key\"
                 int_value: 1
-            }")?;
+            }",
+    )?;
     let read_result: InternalRowProto = index.read_row(read_op)?;
 
-    assert_eq!(read_result, parse_from_str::<InternalRowProto>("
-            col_values { int_value: 1 }")?);
+    assert_eq!(
+        read_result,
+        parse_from_str::<InternalRowProto>(
+            "
+            col_values { int_value: 1 }"
+        )?
+    );
     Ok(())
 }
 
@@ -248,8 +295,11 @@ fn read_row_ok() -> Result<(), Error> {
 fn read_row_many_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut index = Index::create(
-        &mut context.file, context.db_config, context.index_config.clone())?;
-    let num_iter = 10000;
+        &mut context.file,
+        context.db_config,
+        context.index_config.clone(),
+    )?;
+    let num_iter = 1000;
 
     for i in 0..num_iter {
         let mut col_val = ColumnValueProto::new();

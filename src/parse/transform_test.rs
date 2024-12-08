@@ -1,8 +1,8 @@
 use crate::error::*;
 use crate::parse::transform::*;
-use crate::protos::generated::operations::*;
-use crate::protos::generated::config::*;
 use crate::protos::generated::chunk::*;
+use crate::protos::generated::config::*;
+use crate::protos::generated::operations::*;
 use protobuf::text_format::parse_from_str;
 
 fn setup() {
@@ -12,7 +12,8 @@ fn setup() {
 #[test]
 fn insert_op_success() -> Result<(), Error> {
     setup();
-    let schema = parse_from_str::<IndexSchema>("
+    let schema = parse_from_str::<IndexSchema>(
+        "
         name: \"TestIndex\"
         columns {
             name: \"Key\"
@@ -22,8 +23,11 @@ fn insert_op_success() -> Result<(), Error> {
         columns {
             name: \"Col\"
             type: INTEGER
-        }").unwrap();
-    let op = parse_from_str::<InsertProto>("
+        }",
+    )
+    .unwrap();
+    let op = parse_from_str::<InsertProto>(
+        "
         index_name: \"TestIndex\"
         column_values {
             name: \"Key\"
@@ -32,15 +36,22 @@ fn insert_op_success() -> Result<(), Error> {
         column_values {
             name: \"Col\"
             int_value: 2
-        }").unwrap();
+        }",
+    )
+    .unwrap();
 
     let row = insert_op(op, &schema);
-    assert_eq!(row,
+    assert_eq!(
+        row,
         (
             1,
-            parse_from_str::<InternalRowProto>("
+            parse_from_str::<InternalRowProto>(
+                "
                 col_values { int_value: 1 }
-                col_values { int_value: 2 }").unwrap()
-        ));
+                col_values { int_value: 2 }"
+            )
+            .unwrap()
+        )
+    );
     Ok(())
 }
