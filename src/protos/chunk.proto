@@ -39,22 +39,19 @@ message NodeProto {
 
 // TODO: pointers to siblings
 message InternalNodeProto {
-  message Value {
-    oneof value_type {
-      string key = 1;
-      uint32 child_id = 2;
-    }
-  }
-  repeated Value values = 2;
+  // NOTE: keys[i] < all keys in child_ids[i].
+  // len(keys) may be eq, -1 from len(child_ids).
+  repeated uint32 keys = 1;
+  repeated uint32 child_ids = 2;
 }
 
 message LeafNodeProto {
-  repeated InternalRowProto rows = 3;
+  repeated uint32 keys = 1;
+  repeated InternalRowProto rows = 2;
 }
 
 message InternalRowProto {
-  string key = 1;
-  repeated InternalColumnProto col_values = 2;
+  repeated InternalColumnProto col_values = 1;
 }
 
 message InternalColumnProto {

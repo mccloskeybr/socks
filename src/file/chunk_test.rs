@@ -99,26 +99,13 @@ fn huge_chunk_fails_write() -> Result<(), Error> {
 #[test]
 fn would_chunk_overflow_false() -> Result<(), Error> {
     let mut context = setup();
-    let chunk = ChunkProto::new();
-    let mut row = InternalRowProto::new();
-    row.key = "key".into();
-    assert!(!would_chunk_overflow(&context.config,
-                                  chunk.compute_size() as usize + row.compute_size() as usize));
+    assert!(!would_chunk_overflow(&context.config, 0));
     Ok(())
 }
 
 #[test]
 fn would_chunk_overflow_true() -> Result<(), Error> {
     let mut context = setup();
-    let mut chunk = ChunkProto::new();
-    for i in 0..context.config.chunk_size as usize {
-        let mut val = internal_node_proto::Value::new();
-        val.set_key("key".to_string());
-        chunk.mut_node().mut_internal().values.push(val);
-    }
-    let mut row = InternalRowProto::new();
-    row.key = "key".into();
-    assert!(would_chunk_overflow(&context.config,
-                                 chunk.compute_size() as usize + row.compute_size() as usize));
+    assert!(would_chunk_overflow(&context.config, context.config.chunk_size as usize));
     Ok(())
 }

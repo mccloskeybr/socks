@@ -35,11 +35,12 @@ fn insert_op_success() -> Result<(), Error> {
         }").unwrap();
 
     let row = insert_op(op, &schema);
-    assert_eq!(
-        row,
-        parse_from_str::<InternalRowProto>("
-            key: \"1.\"
-            col_values { int_value: 1 }
-            col_values { int_value: 2 }").unwrap());
+    assert_eq!(row,
+        (
+            1,
+            parse_from_str::<InternalRowProto>("
+                col_values { int_value: 1 }
+                col_values { int_value: 2 }").unwrap()
+        ));
     Ok(())
 }

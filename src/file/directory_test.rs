@@ -48,12 +48,12 @@ fn find_chunk_offset_success() -> Result<(), Error> {
                 int_value: 1
             }")?)?;
     }
-    assert_eq!(index.file.get_ref().len(), (index.db_config.file.chunk_size * 5) as usize);
+    assert_eq!(index.file.get_ref().len(), (index.db_config.file.chunk_size * 4) as usize);
 
     let arbitrary_data_chunk = chunk::read_chunk_at(
         &index.db_config.file, &mut index.file, 4)?;
     let arbitrary_data_chunk_offset = directory::find_chunk_offset(&mut index, arbitrary_data_chunk.node().id)?;
-    assert_eq!(arbitrary_data_chunk_offset, 4);
+    assert_eq!(arbitrary_data_chunk_offset, 2);
 
     Ok(())
 }

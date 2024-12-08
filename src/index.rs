@@ -67,17 +67,19 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
 
     pub fn insert(&mut self, op: InsertProto) -> Result<(), Error> {
         // TODO: validate op
-        let row = transform::insert_op(op, &self.metadata.config.schema);
+        let (key, row) = transform::insert_op(op, &self.metadata.config.schema);
         log::trace!("Inserting row: {row}");
 
         match self.metadata.config.insert_method.enum_value_or_default() {
-            index_config::InsertMethod::AGGRESSIVE_SPLIT => bp_tree::insert_aggressive_split::insert(self, row),
+            index_config::InsertMethod::AGGRESSIVE_SPLIT => {
+                return bp_tree::insert_aggressive_split::insert::<16, F>(self, key, row);
+            }
         }
     }
 
     pub fn read_row(&mut self, op: ReadRowProto) -> Result<InternalRowProto, Error> {
         // TODO: validate op
-        let key: String = transform::read_row_op(op, &self.metadata.config.schema);
-        bp_tree::read::read_row(self, self.metadata.root_chunk_id, key)
+        let key: u32 = transform::read_row_op(op, &self.metadata.config.schema);
+        bp_tree::read::read_row::<16, F>(self, self.metadata.root_chunk_id, key)
     }
 }

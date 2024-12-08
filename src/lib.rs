@@ -1,11 +1,12 @@
 #![allow(warnings)]
+#![feature(portable_simd)]
 
 extern crate self as socks;
 
-mod file;
-mod parse;
 mod bp_tree;
-mod protos;
 mod error;
-mod stats;
+mod file;
 pub mod index;
+mod parse;
+mod protos;
+mod stats;
