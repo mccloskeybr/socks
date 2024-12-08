@@ -24,7 +24,8 @@ message IndexConfig {
   InsertMethod insert_method = 2;
 
   enum ReadMethod {
-    INCREMENTAL = 0;
+    BINARY_SEARCH = 0;
+    INCREMENTAL = 1;
   }
   ReadMethod read_method = 3;
 }

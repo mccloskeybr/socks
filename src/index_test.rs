@@ -19,7 +19,7 @@ fn setup() -> TestContext {
         index_config: parse_from_str::<IndexConfig>(
             "
             insert_method: AGGRESSIVE_SPLIT
-            read_method: INCREMENTAL
+            read_method: BINARY_SEARCH
             schema {
                 name: \"TestIndex\"
                 columns {
@@ -299,7 +299,7 @@ fn read_row_many_ok() -> Result<(), Error> {
         context.db_config,
         context.index_config.clone(),
     )?;
-    let num_iter = 1000;
+    let num_iter = 100000;
 
     for i in 0..num_iter {
         let mut col_val = ColumnValueProto::new();

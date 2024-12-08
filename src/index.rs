@@ -9,7 +9,6 @@ use crate::parse::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
-use crate::LANE_WIDTH;
 use protobuf::Message;
 use protobuf::MessageField;
 use std::io::{Read, Seek, Write};
@@ -75,7 +74,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
 
         match self.metadata.config.insert_method.enum_value_or_default() {
             index_config::InsertMethod::AGGRESSIVE_SPLIT => {
-                return bp_tree::insert_aggressive_split::insert::<LANE_WIDTH, F>(self, key, row);
+                return bp_tree::insert_aggressive_split::insert::<F>(self, key, row);
             }
         }
     }
@@ -86,7 +85,14 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
 
         match self.metadata.config.read_method.enum_value_or_default() {
             index_config::ReadMethod::INCREMENTAL => {
-                return bp_tree::read_sequential::read_row::<LANE_WIDTH, F>(
+                return bp_tree::read_sequential::read_row::<F>(
+                    self,
+                    self.metadata.root_chunk_id,
+                    key,
+                );
+            }
+            index_config::ReadMethod::BINARY_SEARCH => {
+                return bp_tree::read_binary_search::read_row::<F>(
                     self,
                     self.metadata.root_chunk_id,
                     key,

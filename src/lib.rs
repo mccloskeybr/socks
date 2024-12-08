@@ -1,7 +1,11 @@
 #![allow(warnings)]
 #![feature(portable_simd)]
 
-static LANE_WIDTH: usize = 16;
+// How many SIMD lanes to use.
+// Used to accelerate key comparison during B+ tree traversal.
+static LANE_WIDTH: usize = 4;
+
+static BINARY_READ_ITER_CUTOFF: usize = 10;
 
 extern crate self as socks;
 

@@ -5,29 +5,27 @@ use crate::parse::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
+use crate::LANE_WIDTH;
 use protobuf::Message;
 use protobuf::MessageField;
 use std::io::{Read, Seek, Write};
 use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
 use std::simd::{LaneCount, Simd, SupportedLaneCount};
 
-fn insert_non_full_leaf<const N: usize, F: Read + Write + Seek>(
+fn insert_non_full_leaf<F: Read + Write + Seek>(
     index: &mut Index<F>,
     node_chunk: &mut ChunkProto,
     key: u32,
     row: InternalRowProto,
-) -> Result<(), Error>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+) -> Result<(), Error> {
     debug_assert!(node_chunk.has_node());
     debug_assert!(node_chunk.node().has_leaf());
 
     let leaf: &mut LeafNodeProto = node_chunk.mut_node().mut_leaf();
     let mut idx = 0;
-    let keys = Simd::<u32, N>::splat(key);
-    for chunk in leaf.keys.chunks(N) {
-        let test_keys = Simd::<u32, N>::load_or_default(chunk);
+    let keys = Simd::<u32, LANE_WIDTH>::splat(key);
+    for chunk in leaf.keys.chunks(LANE_WIDTH) {
+        let test_keys = Simd::<u32, LANE_WIDTH>::load_or_default(chunk);
         let mask = keys.simd_lt(test_keys);
         match mask.first_set() {
             Some(j) => {
@@ -45,22 +43,19 @@ where
     Ok(())
 }
 
-fn insert_non_full_internal<const N: usize, F: Read + Write + Seek>(
+fn insert_non_full_internal<F: Read + Write + Seek>(
     index: &mut Index<F>,
     node_chunk: &mut ChunkProto,
     key: u32,
     row: InternalRowProto,
-) -> Result<(), Error>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+) -> Result<(), Error> {
     debug_assert!(node_chunk.has_node());
     debug_assert!(node_chunk.node().has_internal());
 
     let mut idx = 0;
-    let keys = Simd::<u32, N>::splat(key);
-    for chunk in node_chunk.node().internal().keys.chunks(N) {
-        let test_keys = Simd::<u32, N>::load_or_default(chunk);
+    let keys = Simd::<u32, LANE_WIDTH>::splat(key);
+    for chunk in node_chunk.node().internal().keys.chunks(LANE_WIDTH) {
+        let test_keys = Simd::<u32, LANE_WIDTH>::load_or_default(chunk);
         let mask = keys.simd_lt(test_keys);
         match mask.first_set() {
             Some(j) => {
@@ -86,7 +81,7 @@ where
                     child_chunk = right_child;
                 }
             }
-            return insert_non_full_internal::<N, F>(index, &mut child_chunk, key, row);
+            return insert_non_full_internal(index, &mut child_chunk, key, row);
         }
         Some(node_proto::Node_type::Leaf(_)) => {
             if chunk::would_chunk_overflow(
@@ -98,7 +93,7 @@ where
                     child_chunk = right_child;
                 }
             }
-            return insert_non_full_leaf::<N, F>(index, &mut child_chunk, key, row);
+            return insert_non_full_leaf(index, &mut child_chunk, key, row);
         }
         None => unreachable!(),
     }
@@ -170,14 +165,11 @@ fn split_child_internal<F: Read + Write + Seek>(
 
 // NOTE: https://www.geeksforgeeks.org/insertion-in-a-b-tree/
 // TODO: ensure key doesn't already exist
-pub fn insert<const N: usize, F: Read + Write + Seek>(
+pub fn insert<F: Read + Write + Seek>(
     index: &mut Index<F>,
     key: u32,
     row: InternalRowProto,
-) -> Result<(), Error>
-where
-    LaneCount<N>: SupportedLaneCount,
-{
+) -> Result<(), Error> {
     let mut root_chunk = row_data::find_chunk(index, index.metadata.root_chunk_id)?;
     debug_assert!(root_chunk.node().has_internal());
 
@@ -219,7 +211,7 @@ where
 
         split_child_internal(index, &mut root_chunk, &mut child_chunk, 0)?;
     }
-    insert_non_full_internal::<N, F>(index, &mut root_chunk, key, row)?;
+    insert_non_full_internal(index, &mut root_chunk, key, row)?;
     metadata::commit_metadata(index)?;
     Ok(())
 }
