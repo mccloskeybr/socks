@@ -71,33 +71,12 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
         // TODO: validate op
         let (key, row) = transform::insert_op(op, &self.metadata.config.schema);
         log::trace!("Inserting row: {row}");
-
-        match self.metadata.config.insert_method.enum_value_or_default() {
-            index_config::InsertMethod::AGGRESSIVE_SPLIT => {
-                return bp_tree::insert_aggressive_split::insert::<F>(self, key, row);
-            }
-        }
+        bp_tree::insert(self, key, row)
     }
 
     pub fn read_row(&mut self, op: ReadRowProto) -> Result<InternalRowProto, Error> {
         // TODO: validate op
         let key: u32 = transform::read_row_op(op, &self.metadata.config.schema);
-
-        match self.metadata.config.read_method.enum_value_or_default() {
-            index_config::ReadMethod::INCREMENTAL => {
-                return bp_tree::read_sequential::read_row::<F>(
-                    self,
-                    self.metadata.root_chunk_id,
-                    key,
-                );
-            }
-            index_config::ReadMethod::BINARY_SEARCH => {
-                return bp_tree::read_binary_search::read_row::<F>(
-                    self,
-                    self.metadata.root_chunk_id,
-                    key,
-                );
-            }
-        }
+        bp_tree::read_row(self, self.metadata.root_chunk_id, key)
     }
 }

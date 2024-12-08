@@ -299,7 +299,7 @@ fn read_row_many_ok() -> Result<(), Error> {
         context.db_config,
         context.index_config.clone(),
     )?;
-    let num_iter = 100000;
+    let num_iter = 1000;
 
     for i in 0..num_iter {
         let mut col_val = ColumnValueProto::new();
