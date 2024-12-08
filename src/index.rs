@@ -18,6 +18,8 @@ use crate::protos::generated::chunk::*;
 // Chunks 1 - n:     RowData directory chunks
 // Chunks n+1 - end: RowData chunks
 
+static LANE_WIDTH: usize = 16;
+
 pub struct Index<'a, F: 'a + Read + Write + Seek> {
     pub file: &'a mut F,
     pub metadata: IndexMetadataProto,
@@ -72,7 +74,7 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
 
         match self.metadata.config.insert_method.enum_value_or_default() {
             index_config::InsertMethod::AGGRESSIVE_SPLIT => {
-                return bp_tree::insert_aggressive_split::insert::<16, F>(self, key, row);
+                return bp_tree::insert_aggressive_split::insert::<LANE_WIDTH, F>(self, key, row);
             }
         }
     }
@@ -80,6 +82,6 @@ impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
     pub fn read_row(&mut self, op: ReadRowProto) -> Result<InternalRowProto, Error> {
         // TODO: validate op
         let key: u32 = transform::read_row_op(op, &self.metadata.config.schema);
-        bp_tree::read::read_row::<16, F>(self, self.metadata.root_chunk_id, key)
+        bp_tree::read::read_row::<LANE_WIDTH, F>(self, self.metadata.root_chunk_id, key)
     }
 }
