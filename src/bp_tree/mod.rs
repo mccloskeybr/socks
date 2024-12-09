@@ -5,9 +5,9 @@ use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use std::io::{Read, Seek, Write};
 
-pub(crate) mod insert_aggressive_split;
-pub(crate) mod read_binary_search;
-pub(crate) mod read_sequential;
+mod insert_aggressive_split;
+mod read_binary_search;
+mod read_sequential;
 
 // find what index of the current internal node's child nodes should be traversed
 // next in order to find the row with the given key.
@@ -28,7 +28,7 @@ pub fn find_next_node_idx_for_key(
 
 // find what index in the current leaf node the key should be placed.
 // for read calls, this returns the row with the key, else the keys will mismatch.
-// for write calls, this returns where the row should be inserted into node.
+// for write calls, this returns where the row should be inserted into the leaf.
 pub fn find_row_idx_for_key(config: &IndexConfig, leaf: &LeafNodeProto, key: u32) -> usize {
     match config.read_method.enum_value_or_default() {
         index_config::ReadMethod::INCREMENTAL => {

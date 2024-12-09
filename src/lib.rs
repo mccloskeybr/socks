@@ -3,7 +3,7 @@
 
 // How many SIMD lanes to use.
 // Used to accelerate key comparison during B+ tree traversal.
-static LANE_WIDTH: usize = 4;
+static LANE_WIDTH: usize = 8;
 
 static BINARY_READ_ITER_CUTOFF: usize = 10;
 

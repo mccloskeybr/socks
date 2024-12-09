@@ -21,7 +21,6 @@ fn fan_over_range(low: usize, high: usize) -> Simd<usize, LANE_WIDTH> {
     Simd::from_slice(&idxs)
 }
 
-// retrieves which child node to traverse to find the provided key.
 pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Result<usize, Error> {
     if internal.keys.len() == 0 {
         debug_assert!(internal.child_ids.len() > 0);
@@ -80,9 +79,32 @@ pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Res
 }
 
 pub fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
-    let mut idx: usize = 0;
     let keys = Simd::<u32, LANE_WIDTH>::splat(key);
-    for chunk in leaf.keys.chunks(LANE_WIDTH) {
+
+    let mut lower: usize = 0;
+    let mut upper: usize = std::cmp::max(leaf.keys.len(), 1) - 1;
+    while upper - lower > BINARY_READ_ITER_CUTOFF {
+        let idxs: Simd<usize, LANE_WIDTH> = fan_over_range(lower, upper);
+        let test_keys = Simd::gather_or_default(&leaf.keys, idxs);
+        let comp: Mask<isize, LANE_WIDTH> = keys.simd_le(test_keys).into();
+        match comp.first_set() {
+            None => {
+                lower = idxs.to_array()[LANE_WIDTH - 1];
+            }
+            Some(i) if i == 0 => {
+                upper = idxs.to_array()[0];
+            }
+            Some(i) => {
+                upper = idxs.to_array()[i];
+                lower = idxs.to_array()[std::cmp::max(i, 1) - 1];
+            }
+            _ => unreachable!(),
+        }
+        debug_assert!(lower <= upper);
+    }
+
+    let mut idx: usize = lower;
+    for chunk in leaf.keys.get(lower..upper + 1).unwrap().chunks(LANE_WIDTH) {
         let test_keys = Simd::<u32, LANE_WIDTH>::load_or_default(chunk);
         let mask = keys.simd_le(test_keys);
         match mask.first_set() {
