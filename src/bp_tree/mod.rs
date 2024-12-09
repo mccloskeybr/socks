@@ -43,10 +43,10 @@ pub fn find_row_idx_for_key(config: &IndexConfig, leaf: &LeafNodeProto, key: u32
 // finds the row with the associated key, else returns NotFound.
 pub fn read_row<F: Read + Write + Seek>(
     index: &mut Index<F>,
-    curr_id: u32,
+    curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
-    let curr_chunk: ChunkProto = row_data::find_chunk(index, curr_id)?;
+    let curr_chunk: ChunkProto = row_data::read_chunk(index, curr_offset)?;
     debug_assert!(curr_chunk.has_node());
     let node: &NodeProto = curr_chunk.node();
 
@@ -57,7 +57,7 @@ pub fn read_row<F: Read + Write + Seek>(
                 &internal,
                 key,
             )?;
-            return read_row(index, internal.child_ids[idx], key);
+            return read_row(index, internal.child_offsets[idx], key);
         }
         Some(node_proto::Node_type::Leaf(leaf)) => {
             let idx = find_row_idx_for_key(index.metadata.config.as_ref().unwrap(), &leaf, key);

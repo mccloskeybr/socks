@@ -4,12 +4,6 @@ use crate::index::*;
 use crate::protos::generated::chunk::*;
 use std::io::{Read, Seek, Write};
 
-pub fn next_chunk_id<F: Read + Write + Seek>(index: &mut Index<F>) -> u32 {
-    let id = index.metadata.next_chunk_id;
-    index.metadata.next_chunk_id += 1;
-    id
-}
-
 pub fn next_chunk_offset<F: Read + Write + Seek>(index: &mut Index<F>) -> u32 {
     let offset = index.metadata.next_chunk_offset;
     index.metadata.next_chunk_offset += 1;

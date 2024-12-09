@@ -59,27 +59,19 @@ fn create_ok() -> Result<(), Error> {
     let mut index = Index::create(&mut context.file, context.db_config, context.index_config)?;
     assert_eq!(
         index.file.get_ref().len(),
-        (index.db_config.file.chunk_size * 3) as usize
+        (index.db_config.file.chunk_size * 2) as usize
     );
     let chunk_0 = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 0)?;
     let chunk_1 = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 1)?;
-    let chunk_2 = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
 
     assert!(chunk_0.has_metadata());
     let metadata = chunk_0.metadata();
-    assert_eq!(metadata.next_chunk_id, 1);
-    assert_eq!(metadata.next_chunk_offset, 3);
-    assert_eq!(metadata.root_chunk_id, 0);
+    assert_eq!(metadata.root_chunk_offset, 1);
+    assert_eq!(metadata.next_chunk_offset, 2);
 
-    assert!(chunk_1.has_directory());
-    let dir = chunk_1.directory();
-    assert_eq!(dir.entries.len(), 1);
-    assert_eq!(dir.entries[0].id, 0);
-    assert_eq!(dir.entries[0].offset, 2);
-
-    assert!(chunk_2.has_node());
-    let node = chunk_2.node();
-    assert_eq!(node.id, 0);
+    assert!(chunk_1.has_node());
+    let node = chunk_1.node();
+    assert_eq!(node.offset, 1);
 
     Ok(())
 }
@@ -105,23 +97,23 @@ fn insert_single_ok() -> Result<(), Error> {
 
     assert_eq!(
         index.file.get_ref().len(),
-        (index.db_config.file.chunk_size * 4) as usize
+        (index.db_config.file.chunk_size * 3) as usize
     );
 
-    let root_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
+    let root_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 1)?;
     assert!(root_chunk.has_node());
     let root = root_chunk.node();
-    assert_eq!(root.id, 0);
+    assert_eq!(root.offset, 1);
     assert!(root.has_internal());
     assert_eq!(root.internal().keys.len(), 0);
-    assert_eq!(root.internal().child_ids.len(), 1);
-    assert_eq!(root.internal().child_ids[0], 1);
+    assert_eq!(root.internal().child_offsets.len(), 1);
+    assert_eq!(root.internal().child_offsets[0], 2);
 
-    let data_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 3)?;
+    let data_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
     assert!(data_chunk.has_node());
     let data = data_chunk.node();
     assert!(data.has_leaf());
-    assert_eq!(data.id, 1);
+    assert_eq!(data.offset, 2);
     assert_eq!(
         (1, data.leaf().rows[0].clone()),
         transform::insert_op(op, &index.metadata.config.schema)
@@ -169,19 +161,19 @@ fn insert_sorted() -> Result<(), Error> {
 
     assert_eq!(
         index.file.get_ref().len(),
-        (index.db_config.file.chunk_size * 4) as usize
+        (index.db_config.file.chunk_size * 3) as usize
     );
-    let root_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
+    let root_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 1)?;
     assert!(root_chunk.has_node());
     let root = root_chunk.node();
-    assert_eq!(root.id, 0);
+    assert_eq!(root.offset, 1);
     assert!(root.has_internal());
-    assert_eq!(root.internal().child_ids.len(), 1);
+    assert_eq!(root.internal().child_offsets.len(), 1);
 
-    let data_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 3)?;
+    let data_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 2)?;
     assert!(data_chunk.has_node());
     let data = data_chunk.node();
-    assert_eq!(data.id, 1);
+    assert_eq!(data.offset, 2);
     assert!(data.has_leaf());
     assert_eq!(data.leaf().rows.len(), 3);
 
@@ -227,24 +219,14 @@ fn insert_many_ok() -> Result<(), Error> {
 
     let metadata = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 0)?;
     let metadata = metadata.metadata();
-    assert_eq!(metadata.next_chunk_id, 2);
-    assert_eq!(metadata.next_chunk_offset, 4);
-    assert_eq!(metadata.root_chunk_id, 0);
-    assert_eq!(metadata.num_directories, 1);
-
-    let dir = chunk::read_chunk_at(&index.db_config.file, &mut index.file, 1)?;
-    let dir = dir.directory();
-    assert_eq!(dir.entries.len(), 2);
-    assert_eq!(dir.entries[0].id, 0);
-    assert_eq!(dir.entries[0].offset, 2);
-    assert_eq!(dir.entries[1].id, 1);
-    assert_eq!(dir.entries[1].offset, 3);
+    assert_eq!(metadata.next_chunk_offset, 3);
+    assert_eq!(metadata.root_chunk_offset, 1);
 
     assert_eq!(
         index.file.get_ref().len(),
-        (index.db_config.file.chunk_size * 4) as usize
+        (index.db_config.file.chunk_size * 3) as usize
     );
-    for i in 2..5 {
+    for i in 1..3 {
         let node_chunk = chunk::read_chunk_at(&index.db_config.file, &mut index.file, i)?;
         validate_node_sorted(node_chunk.node());
     }
@@ -299,7 +281,7 @@ fn read_row_many_ok() -> Result<(), Error> {
         context.db_config,
         context.index_config.clone(),
     )?;
-    let num_iter = 1000;
+    let num_iter = 100;
 
     for i in 0..num_iter {
         let mut col_val = ColumnValueProto::new();

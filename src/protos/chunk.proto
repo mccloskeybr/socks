@@ -5,17 +5,14 @@ import "config.proto";
 message ChunkProto {
   oneof chunk_type {
     IndexMetadataProto metadata = 1;
-    DirectoryProto directory = 2;
-    NodeProto node = 3;
+    NodeProto node = 2;
   }
 }
 
 message IndexMetadataProto {
   IndexConfig config = 1;
-  uint32 root_chunk_id = 2;
-  uint32 num_directories = 3;
-  uint32 next_chunk_id = 4;
-  uint32 next_chunk_offset = 5;
+  uint32 root_chunk_offset = 2;
+  uint32 next_chunk_offset = 3;
 }
 
 message DirectoryProto {
@@ -30,10 +27,11 @@ message DirectoryProto {
 }
 
 message NodeProto {
-  uint32 id = 1;
+  uint32 offset = 1;
+  uint32 parent_offset = 2;
   oneof node_type {
-    InternalNodeProto internal = 2;
-    LeafNodeProto leaf = 3;
+    InternalNodeProto internal = 3;
+    LeafNodeProto leaf = 4;
   }
 }
 
@@ -42,7 +40,7 @@ message InternalNodeProto {
   // NOTE: keys[i] < all keys in child_ids[i].
   // len(keys) may be eq, -1 from len(child_ids).
   repeated uint32 keys = 1;
-  repeated uint32 child_ids = 2;
+  repeated uint32 child_offsets = 2;
 }
 
 message LeafNodeProto {

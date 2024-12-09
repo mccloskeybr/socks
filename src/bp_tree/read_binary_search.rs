@@ -10,6 +10,10 @@ use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
 
 // Creates a simd vector of indices evenly distributed in the range of low, high.
 // e.g. 0, 100 w/ lane width of 4 --> [20, 40, 60, 80].
+//
+// TODO: is building this every inner loop iter more computationally expensive
+// than just ripping it incrementally? could experiment with wide checking the
+// middle of the binary search region as an alternative.
 #[inline]
 fn fan_over_range(low: usize, high: usize) -> Simd<usize, LANE_WIDTH> {
     let step = (high - low + 1) / (LANE_WIDTH + 1);
@@ -23,7 +27,7 @@ fn fan_over_range(low: usize, high: usize) -> Simd<usize, LANE_WIDTH> {
 
 pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Result<usize, Error> {
     if internal.keys.len() == 0 {
-        debug_assert!(internal.child_ids.len() > 0);
+        debug_assert!(internal.child_offsets.len() > 0);
         return Ok(0);
     }
 
@@ -70,9 +74,9 @@ pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Res
         idx += chunk.len();
     }
 
-    if internal.keys.len() != internal.child_ids.len() {
-        debug_assert!(internal.child_ids.len() == internal.keys.len() + 1);
-        return Ok(internal.child_ids.len() - 1);
+    if internal.keys.len() != internal.child_offsets.len() {
+        debug_assert!(internal.child_offsets.len() == internal.keys.len() + 1);
+        return Ok(internal.child_offsets.len() - 1);
     }
 
     Err(Error::NotFound(format!("Row with key {} not found!", key)))

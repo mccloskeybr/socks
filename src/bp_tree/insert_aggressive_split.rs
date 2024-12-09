@@ -43,8 +43,9 @@ fn insert_non_full_internal<F: Read + Write + Seek>(
         node_chunk.node().internal(),
         key,
     )?;
-    debug_assert!(idx < node_chunk.node().internal().child_ids.len());
-    let mut child_chunk = row_data::find_chunk(index, node_chunk.node().internal().child_ids[idx])?;
+    debug_assert!(idx < node_chunk.node().internal().child_offsets.len());
+    let mut child_chunk =
+        row_data::read_chunk(index, node_chunk.node().internal().child_offsets[idx])?;
     debug_assert!(child_chunk.has_node());
     match &child_chunk.mut_node().node_type {
         Some(node_proto::Node_type::Internal(_)) => {
@@ -84,21 +85,26 @@ fn split_child_leaf<F: Read + Write + Seek>(
     log::trace!("Splitting leaf node.");
     debug_assert!(parent_chunk.node().has_internal());
     debug_assert!(left_child_chunk.node().has_leaf());
-    let parent: &mut InternalNodeProto = parent_chunk.mut_node().mut_internal();
+    let parent: &mut NodeProto = parent_chunk.mut_node();
     let left_child: &mut LeafNodeProto = left_child_chunk.mut_node().mut_leaf();
 
     let mut split_idx = left_child.keys.len() / 2;
 
     let mut right_child_chunk = ChunkProto::new();
     let mut right_child = right_child_chunk.mut_node();
-    right_child.id = metadata::next_chunk_id(index);
+    right_child.offset = metadata::next_chunk_offset(index);
+    right_child.parent_offset = parent.offset;
     right_child.mut_leaf().keys = left_child.keys.split_off(split_idx);
     right_child.mut_leaf().rows = left_child.rows.split_off(split_idx);
 
     parent
+        .mut_internal()
         .keys
         .insert(child_chunk_idx, right_child.leaf().keys[0]);
-    parent.child_ids.insert(child_chunk_idx + 1, right_child.id);
+    parent
+        .mut_internal()
+        .child_offsets
+        .insert(child_chunk_idx + 1, right_child.offset);
 
     row_data::commit_chunk(index, left_child_chunk)?;
     row_data::commit_chunk(index, &right_child_chunk)?;
@@ -116,21 +122,26 @@ fn split_child_internal<F: Read + Write + Seek>(
     log::trace!("Splitting internal node.");
     debug_assert!(parent_chunk.node().has_internal());
     debug_assert!(left_child_chunk.node().has_internal());
-    let parent: &mut InternalNodeProto = parent_chunk.mut_node().mut_internal();
+    let parent: &mut NodeProto = parent_chunk.mut_node();
     let left_child: &mut InternalNodeProto = left_child_chunk.mut_node().mut_internal();
 
     let mut split_idx = left_child.keys.len() / 2;
 
     let mut right_child_chunk = ChunkProto::new();
     let mut right_child = right_child_chunk.mut_node();
-    right_child.id = metadata::next_chunk_id(index);
+    right_child.offset = metadata::next_chunk_offset(index);
+    right_child.parent_offset = parent.offset;
     right_child.mut_internal().keys = left_child.keys.split_off(split_idx);
-    right_child.mut_internal().child_ids = left_child.child_ids.split_off(split_idx);
+    right_child.mut_internal().child_offsets = left_child.child_offsets.split_off(split_idx);
 
     parent
+        .mut_internal()
         .keys
         .insert(child_chunk_idx, left_child.keys[left_child.keys.len() - 1]);
-    parent.child_ids.insert(child_chunk_idx + 1, right_child.id);
+    parent
+        .mut_internal()
+        .child_offsets
+        .insert(child_chunk_idx + 1, right_child.offset);
 
     row_data::commit_chunk(index, left_child_chunk)?;
     row_data::commit_chunk(index, &right_child_chunk)?;
@@ -146,19 +157,26 @@ pub fn insert<F: Read + Write + Seek>(
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
-    let mut root_chunk = row_data::find_chunk(index, index.metadata.root_chunk_id)?;
+    let mut root_chunk = row_data::read_chunk(index, index.metadata.root_chunk_offset)?;
     debug_assert!(root_chunk.node().has_internal());
 
-    if root_chunk.node().internal().keys.len() + root_chunk.node().internal().child_ids.len() == 0 {
+    if root_chunk.node().internal().keys.len() + root_chunk.node().internal().child_offsets.len()
+        == 0
+    {
         log::trace!("Inserting first value.");
 
         let mut data_chunk = ChunkProto::new();
         let mut data = data_chunk.mut_node();
-        data.id = metadata::next_chunk_id(index);
+        data.offset = metadata::next_chunk_offset(index);
+        data.parent_offset = root_chunk.node().offset;
         data.mut_leaf().keys.push(key);
         data.mut_leaf().rows.push(row);
 
-        root_chunk.mut_node().mut_internal().child_ids.push(data.id);
+        root_chunk
+            .mut_node()
+            .mut_internal()
+            .child_offsets
+            .push(data.offset);
 
         row_data::commit_chunk(index, &data_chunk)?;
         row_data::commit_chunk(index, &root_chunk)?;
@@ -175,15 +193,15 @@ pub fn insert<F: Read + Write + Seek>(
 
         // TODO: this is inefficient.
         let mut child_chunk = root_chunk.clone();
-        child_chunk.mut_node().id = metadata::next_chunk_id(index);
+        child_chunk.mut_node().offset = metadata::next_chunk_offset(index);
 
         root_chunk.mut_node().mut_internal().keys.clear();
-        root_chunk.mut_node().mut_internal().child_ids.clear();
+        root_chunk.mut_node().mut_internal().child_offsets.clear();
         root_chunk
             .mut_node()
             .mut_internal()
-            .child_ids
-            .push(child_chunk.node().id);
+            .child_offsets
+            .push(child_chunk.node().offset);
 
         split_child_internal(index, &mut root_chunk, &mut child_chunk, 0)?;
     }

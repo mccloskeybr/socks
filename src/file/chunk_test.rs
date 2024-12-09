@@ -26,7 +26,7 @@ fn read_write_single_chunk() -> Result<(), Error> {
     let mut context = setup();
 
     let mut chunk_in = ChunkProto::new();
-    chunk_in.mut_metadata().next_chunk_id = 1;
+    chunk_in.mut_metadata().next_chunk_offset = 1;
     write_chunk_at(&context.config, &mut context.file, &chunk_in, 0)?;
     assert_eq!(
         context.file.get_ref().len(),
@@ -46,7 +46,7 @@ fn read_write_many_chunks() -> Result<(), Error> {
     let mut chunks: Vec<ChunkProto> = Vec::new();
     for i in 0..n {
         let mut chunk = ChunkProto::new();
-        chunk.mut_metadata().next_chunk_id = i;
+        chunk.mut_metadata().next_chunk_offset = i;
         chunks.push(chunk);
     }
 
@@ -71,7 +71,7 @@ fn overwrite_chunk() -> Result<(), Error> {
     let mut context = setup();
 
     let mut chunk_1 = ChunkProto::new();
-    chunk_1.mut_metadata().next_chunk_id = 1;
+    chunk_1.mut_metadata().next_chunk_offset = 1;
     write_chunk_at(&context.config, &mut context.file, &chunk_1, 0)?;
     assert_eq!(
         context.file.get_ref().len(),
@@ -79,7 +79,7 @@ fn overwrite_chunk() -> Result<(), Error> {
     );
 
     let mut chunk_2 = ChunkProto::new();
-    chunk_2.mut_metadata().next_chunk_id = 2;
+    chunk_2.mut_metadata().next_chunk_offset = 2;
     write_chunk_at(&context.config, &mut context.file, &chunk_2, 0)?;
     assert_eq!(
         context.file.get_ref().len(),
@@ -97,14 +97,11 @@ fn huge_chunk_fails_write() -> Result<(), Error> {
     let mut context = setup();
 
     let mut chunk = ChunkProto::new();
-    let dir = chunk.mut_directory();
+    let node = chunk.mut_node();
     for i in 0..context.config.chunk_size as usize {
-        let mut entry = directory_proto::Entry::new();
-        entry.id = std::u32::MAX;
-        entry.offset = std::u32::MAX;
-        dir.entries.push(entry);
+        node.mut_internal().keys.push(std::u32::MAX);
     }
-    assert!(dir.compute_size() > context.config.chunk_size as usize as u64);
+    assert!(node.compute_size() > context.config.chunk_size as usize as u64);
     match write_chunk_at(&context.config, &mut context.file, &chunk, 0) {
         Err(Error::OutOfBounds(..)) => return Ok(()),
         _ => panic!(),

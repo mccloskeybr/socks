@@ -25,9 +25,9 @@ pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Res
         idx += chunk.len();
     }
 
-    if internal.keys.len() != internal.child_ids.len() {
-        debug_assert!(internal.child_ids.len() == internal.keys.len() + 1);
-        return Ok(internal.child_ids.len() - 1);
+    if internal.keys.len() != internal.child_offsets.len() {
+        debug_assert!(internal.child_offsets.len() == internal.keys.len() + 1);
+        return Ok(internal.child_offsets.len() - 1);
     }
 
     Err(Error::NotFound(format!("Row with key {} not found!", key)))
