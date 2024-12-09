@@ -22,10 +22,10 @@ fn fan_over_range(low: usize, high: usize) -> Simd<usize, LANE_WIDTH> {
 }
 
 // retrieves which child node to traverse to find the provided key.
-pub fn find_next_node_for_key(internal: &InternalNodeProto, key: u32) -> Result<u32, Error> {
+pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Result<usize, Error> {
     if internal.keys.len() == 0 {
         debug_assert!(internal.child_ids.len() > 0);
-        return Ok(internal.child_ids[0]);
+        return Ok(0);
     }
 
     let keys = Simd::<u32, LANE_WIDTH>::splat(key);
@@ -64,7 +64,7 @@ pub fn find_next_node_for_key(internal: &InternalNodeProto, key: u32) -> Result<
         match mask.first_set() {
             Some(j) => {
                 idx += j;
-                return Ok(internal.child_ids[idx + (key == internal.keys[idx]) as usize]);
+                return Ok(idx + (key == internal.keys[idx]) as usize);
             }
             None => {}
         }
@@ -73,27 +73,26 @@ pub fn find_next_node_for_key(internal: &InternalNodeProto, key: u32) -> Result<
 
     if internal.keys.len() != internal.child_ids.len() {
         debug_assert!(internal.child_ids.len() == internal.keys.len() + 1);
-        return Ok(internal.child_ids[internal.child_ids.len() - 1]);
+        return Ok(internal.child_ids.len() - 1);
     }
 
     Err(Error::NotFound(format!("Row with key {} not found!", key)))
 }
 
-pub fn find_row_for_key(leaf: &LeafNodeProto, key: u32) -> Result<InternalRowProto, Error> {
-    let mut idx = 0;
+pub fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
+    let mut idx: usize = 0;
     let keys = Simd::<u32, LANE_WIDTH>::splat(key);
     for chunk in leaf.keys.chunks(LANE_WIDTH) {
         let test_keys = Simd::<u32, LANE_WIDTH>::load_or_default(chunk);
-        let mask = keys.simd_eq(test_keys);
+        let mask = keys.simd_le(test_keys);
         match mask.first_set() {
             Some(j) => {
                 idx += j;
-                return Ok(leaf.rows[idx].clone());
+                return idx;
             }
             None => {}
         }
         idx += chunk.len();
     }
-
-    Err(Error::NotFound(format!("Row with key {} not found!", key)))
+    idx
 }

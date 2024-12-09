@@ -1,3 +1,4 @@
+use crate::bp_tree;
 use crate::error::*;
 use crate::file::*;
 use crate::index::*;
@@ -9,8 +10,6 @@ use crate::LANE_WIDTH;
 use protobuf::Message;
 use protobuf::MessageField;
 use std::io::{Read, Seek, Write};
-use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
-use std::simd::{LaneCount, Simd, SupportedLaneCount};
 
 fn insert_non_full_leaf<F: Read + Write + Seek>(
     index: &mut Index<F>,
@@ -22,20 +21,7 @@ fn insert_non_full_leaf<F: Read + Write + Seek>(
     debug_assert!(node_chunk.node().has_leaf());
 
     let leaf: &mut LeafNodeProto = node_chunk.mut_node().mut_leaf();
-    let mut idx = 0;
-    let keys = Simd::<u32, LANE_WIDTH>::splat(key);
-    for chunk in leaf.keys.chunks(LANE_WIDTH) {
-        let test_keys = Simd::<u32, LANE_WIDTH>::load_or_default(chunk);
-        let mask = keys.simd_lt(test_keys);
-        match mask.first_set() {
-            Some(j) => {
-                idx += j;
-                break;
-            }
-            None => {}
-        }
-        idx += chunk.len();
-    }
+    let idx = bp_tree::find_row_idx_for_key(&index.metadata.config, leaf, key);
 
     leaf.keys.insert(idx, key);
     leaf.rows.insert(idx, row);
@@ -52,21 +38,11 @@ fn insert_non_full_internal<F: Read + Write + Seek>(
     debug_assert!(node_chunk.has_node());
     debug_assert!(node_chunk.node().has_internal());
 
-    let mut idx = 0;
-    let keys = Simd::<u32, LANE_WIDTH>::splat(key);
-    for chunk in node_chunk.node().internal().keys.chunks(LANE_WIDTH) {
-        let test_keys = Simd::<u32, LANE_WIDTH>::load_or_default(chunk);
-        let mask = keys.simd_lt(test_keys);
-        match mask.first_set() {
-            Some(j) => {
-                idx += j;
-                break;
-            }
-            None => {}
-        }
-        idx += chunk.len();
-    }
-
+    let idx = bp_tree::find_next_node_idx_for_key(
+        &index.metadata.config,
+        node_chunk.node().internal(),
+        key,
+    )?;
     debug_assert!(idx < node_chunk.node().internal().child_ids.len());
     let mut child_chunk = row_data::find_chunk(index, node_chunk.node().internal().child_ids[idx])?;
     debug_assert!(child_chunk.has_node());
