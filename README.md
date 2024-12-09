@@ -1,29 +1,116 @@
 # Socks DB
 
-A small relational database engine written in rust, primarily for education purposes. Not winning any awards, but ¯\\_(ツ)_/¯.
+A small relational database engine written in Rust, primarily for educational benefit.
 
-Current feature set (12/8/2024):
-- Support for a primary index only.
-- Support retrieval of rows given a full key match.
-- B+ tree file format.
-- SIMD accelerated reads / writes.
+## Features
 
-Limitations:
-- No generic query language supported (yet).
-- Keys can only be comprised of a single part.
+- Tabular data abstraction.
+- Stores arbitrarily large datasets.
+- Structured operations for row insertion, retrieval.
+- SIMD-accelerated reads / writes.
+- Configurable algorithms benchmarking / experimentation.
 
-Planned features:
+## User guide
+
+TODO
+
+## Documentation
+
+### Data layout
+
+Socks DB uses a simplified
+[B+ tree](https://en.wikipedia.org/wiki/B%2B_tree) for data storage.
+
+B and B+ trees have been used in database design since the 1970s. TLDR;
+tree nodes either store a range of sorted rows, or a set of pointers to child
+nodes (which reference the largest value held by their child node, to remain
+sorted).
+
+This data structure is popular, because entire B+ tree nodes can be written to
+/ read from disk at once, which offers efficiency benefits over comparable
+algorithms. Newer algorithms are certainly available, e.g.
+[LSM trees](https://en.wikipedia.org/wiki/Log-structured_merge-tree),
+perhaps for another day.
+
+Here is an example table:
+
+![bp_tree](res/bp_tree.png)
+
+Keys are represented as single `u32`s. This allows keys to have a fixed,
+predictable size that makes comparison operations on them easy to vectorize
+using SIMD instructions.
+
+The size of each node is guaranteed to be under some maximum, configurable
+limit, discussed later under _file format_. There are 2 distinct node types:
+
+* Leaf nodes.
+
+These store raw row data, sorted by key. Internally, row keys and row column
+data are stored separately in a
+[struct of arrays](https://en.wikipedia.org/wiki/AoS_and_SoA) format, for easy
+SIMD-parallelization.
+
+* Internal nodes.
+
+These store pointers (effectively file offsets) to child nodes (either internal
+or leaf) that contain no value greater than a known key. All pointers are
+sorted by their known key pairs. Internal nodes are similarly structured as a
+struct of arrays for SIMD-parallelization.
+
+Nodes are allowed to grow in size until they reach a configurable size,
+at which point nodes are split. There are a number of different algorithms
+for B+ tree insertion, retrieval -- Socks DB allows some configuration into
+these inner workings, primarily for education / benchmarking / experimentation
+purposes. Examples include:
+
+- Aggressive split on insertion.
+- Incremental search of node keys on read.
+- Binary search of node keys on read.
+
+### File format
+
+Each Socks DB table is tracked in a separate `.socks` file. The file format
+itself is fairly straightforward.
+
+![bp_tree](res/file_format.png)
+
+- There is a metadata header comprised of high-level information for the
+particular table.
+- Following that, there are n-many fixed-sized chunks that each contain
+exactly 1 B+ tree node (internal or leaf). The maximum size of each chunk
+is configured on the database level.
+
+Using fixed-sized chunks allows optimal maneuvering within the database file
+itself, at the cost of wasted disk space (nodes may not always be full) and
+a hardcap on row data size (a single row cannot exceed more space than the
+leaf node that must contain it), although there are various optimizations /
+features that may provide workarounds (e.g. overflow pages).
+
+Socks DB currently uses [Protobuf](https://protobuf.dev/) as its serialization
+scheme. This is simply because proto is built to be serialized to generally
+compressed binary, although it comes with the cost of additional overhead to
+serialize / deserialize it. The size of any given proto message is not fixed --
+the first 2 bytes of each chunk store the size of the wrapped proto.
+
+## Future
+
+### Roadmap
+
+- Multiple table support.
 - LRU cache.
 - Concurrent request processing.
 - Benchmarking suite.
-- Transactions.
+- Basic transaction support.
 - SQL-like generalizable queries.
 - Persistent access via. sockets.
 
-Optimizations:
-- Instead of using protos, read & write raw data.
-- More efficient B+ tree balancing scheme.
+### Optimizations
 
-References:
-- http://www.cs.columbia.edu/~kar/pubsk/simd.pdf
+- Remove dependency on Protobuf for internal serialization scheme.
+- Experiment with better B+ tree balancing algorithms.
+
+## References
+
+- https://dataintensive.net/
 - https://www.geeksforgeeks.org/introduction-of-b-tree/
+- http://www.cs.columbia.edu/~kar/pubsk/simd.pdf
