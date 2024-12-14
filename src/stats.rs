@@ -11,17 +11,17 @@ struct Stats {
     num_chunk_writes: u64,
 }
 
-pub fn increment_chunk_write() {
+pub(crate) fn increment_chunk_write() {
     let mut stats = global_stats.lock().unwrap();
     stats.num_chunk_writes += 1;
 }
 
-pub fn increment_chunk_read() {
+pub(crate) fn increment_chunk_read() {
     let mut stats = global_stats.lock().unwrap();
     stats.num_chunk_reads += 1;
 }
 
-pub fn print_stats() {
+pub(crate) fn print_stats() {
     let mut stats = global_stats.lock().unwrap();
     log::info!("{:#?}", stats);
 }

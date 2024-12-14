@@ -1,7 +1,6 @@
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
-use crate::table::file::*;
-use crate::table::parse::*;
+use crate::table::chunk;
 use crate::table::table::*;
 use protobuf::text_format::parse_from_str;
 use std::io::Cursor;
@@ -56,7 +55,7 @@ fn validate_node_sorted(node: &NodeProto) {
 #[test]
 fn create_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(&mut context.file, context.db_config, context.table_config)?;
+    let mut table = create(&mut context.file, context.db_config, context.table_config)?;
     assert_eq!(
         table.file.get_ref().len(),
         (table.db_config.file.chunk_size * 2) as usize
@@ -79,7 +78,7 @@ fn create_ok() -> Result<(), Error> {
 #[test]
 fn insert_single_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(
+    let mut table = create(
         &mut context.file,
         context.db_config,
         context.table_config.clone(),
@@ -93,7 +92,7 @@ fn insert_single_ok() -> Result<(), Error> {
                 int_value: 1
             }",
     )?;
-    table.insert(op.clone())?;
+    insert(&mut table, op.clone())?;
 
     assert_eq!(
         table.file.get_ref().len(),
@@ -125,7 +124,7 @@ fn insert_single_ok() -> Result<(), Error> {
 #[test]
 fn insert_sorted() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(
+    let mut table = create(
         &mut context.file,
         context.db_config,
         context.table_config.clone(),
@@ -155,9 +154,9 @@ fn insert_sorted() -> Result<(), Error> {
                 int_value: 3
             }",
     )?;
-    table.insert(op_1.clone())?;
-    table.insert(op_2.clone())?;
-    table.insert(op_3.clone())?;
+    insert(&mut table, op_1.clone())?;
+    insert(&mut table, op_2.clone())?;
+    insert(&mut table, op_3.clone())?;
 
     assert_eq!(
         table.file.get_ref().len(),
@@ -199,7 +198,7 @@ fn insert_sorted() -> Result<(), Error> {
 #[test]
 fn insert_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(
+    let mut table = create(
         &mut context.file,
         context.db_config,
         context.table_config.clone(),
@@ -214,7 +213,7 @@ fn insert_many_ok() -> Result<(), Error> {
         op.table_name = "TestTable".into();
         op.column_values.push(col_val);
 
-        table.insert(op)?;
+        insert(&mut table, op)?;
     }
 
     let metadata = chunk::read_chunk_at(&table.db_config.file, &mut table.file, 0)?;
@@ -237,7 +236,7 @@ fn insert_many_ok() -> Result<(), Error> {
 #[test]
 fn read_row_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(
+    let mut table = create(
         &mut context.file,
         context.db_config,
         context.table_config.clone(),
@@ -251,7 +250,7 @@ fn read_row_ok() -> Result<(), Error> {
                 int_value: 1
             }",
     )?;
-    table.insert(insert_op)?;
+    insert(&mut table, insert_op)?;
 
     let read_op = parse_from_str::<ReadRowProto>(
         "
@@ -261,7 +260,7 @@ fn read_row_ok() -> Result<(), Error> {
                 int_value: 1
             }",
     )?;
-    let read_result: InternalRowProto = table.read_row(read_op)?;
+    let read_result: InternalRowProto = read_row(&mut table, read_op)?;
 
     assert_eq!(
         read_result,
@@ -276,7 +275,7 @@ fn read_row_ok() -> Result<(), Error> {
 #[test]
 fn read_row_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(
+    let mut table = create(
         &mut context.file,
         context.db_config,
         context.table_config.clone(),
@@ -292,7 +291,7 @@ fn read_row_many_ok() -> Result<(), Error> {
         op.table_name = "TestTable".into();
         op.column_values.push(col_val);
 
-        table.insert(op)?;
+        insert(&mut table, op)?;
     }
     for i in 0..num_iter {
         let mut key_val = ColumnValueProto::new();
@@ -303,7 +302,7 @@ fn read_row_many_ok() -> Result<(), Error> {
         op.table_name = "TestTable".into();
         op.key_value = Some(key_val).into();
 
-        let read_result = table.read_row(op)?;
+        let read_result = read_row(&mut table, op)?;
 
         let mut expected_col_val = InternalColumnProto::new();
         expected_col_val.set_int_value(i);

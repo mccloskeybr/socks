@@ -4,9 +4,8 @@ use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::table::bp_tree;
 use crate::table::cache;
-use crate::table::file::*;
-use crate::table::parse::*;
 use crate::table::table::*;
+use crate::table::*;
 use crate::LANE_WIDTH;
 use protobuf::Message;
 use protobuf::MessageField;
@@ -92,7 +91,7 @@ fn split_child_leaf<F: Read + Write + Seek>(
 
     let mut right_child_chunk = ChunkProto::new();
     let mut right_child = right_child_chunk.mut_node();
-    right_child.offset = metadata::next_chunk_offset(table);
+    right_child.offset = table::next_chunk_offset(table);
     right_child.parent_offset = parent.offset;
     right_child.mut_leaf().keys = left_child.keys.split_off(split_idx);
     right_child.mut_leaf().rows = left_child.rows.split_off(split_idx);
@@ -129,7 +128,7 @@ fn split_child_internal<F: Read + Write + Seek>(
 
     let mut right_child_chunk = ChunkProto::new();
     let mut right_child = right_child_chunk.mut_node();
-    right_child.offset = metadata::next_chunk_offset(table);
+    right_child.offset = table::next_chunk_offset(table);
     right_child.parent_offset = parent.offset;
     right_child.mut_internal().keys = left_child.keys.split_off(split_idx);
     right_child.mut_internal().child_offsets = left_child.child_offsets.split_off(split_idx);
@@ -167,7 +166,7 @@ pub fn insert<F: Read + Write + Seek>(
 
         let mut data_chunk = ChunkProto::new();
         let mut data = data_chunk.mut_node();
-        data.offset = metadata::next_chunk_offset(table);
+        data.offset = table::next_chunk_offset(table);
         data.parent_offset = root_chunk.node().offset;
         data.mut_leaf().keys.push(key);
         data.mut_leaf().rows.push(row);
@@ -181,7 +180,7 @@ pub fn insert<F: Read + Write + Seek>(
         cache::write(table, &data_chunk)?;
         cache::write(table, &root_chunk)?;
 
-        metadata::commit_metadata(table)?;
+        table::commit_metadata(table)?;
         return Ok(());
     }
 
@@ -193,7 +192,7 @@ pub fn insert<F: Read + Write + Seek>(
 
         // TODO: this is inefficient.
         let mut child_chunk = root_chunk.clone();
-        child_chunk.mut_node().offset = metadata::next_chunk_offset(table);
+        child_chunk.mut_node().offset = table::next_chunk_offset(table);
 
         root_chunk.mut_node().mut_internal().keys.clear();
         root_chunk.mut_node().mut_internal().child_offsets.clear();
@@ -206,6 +205,6 @@ pub fn insert<F: Read + Write + Seek>(
         split_child_internal(table, &mut root_chunk, &mut child_chunk, 0)?;
     }
     insert_non_full_internal(table, &mut root_chunk, key, row)?;
-    metadata::commit_metadata(table)?;
+    table::commit_metadata(table)?;
     Ok(())
 }

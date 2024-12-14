@@ -1,6 +1,6 @@
 use crate::error::*;
 use crate::protos::generated::chunk::*;
-use crate::table::file::*;
+use crate::table::chunk;
 use crate::table::table::*;
 use crate::CACHE_SIZE;
 use std::io::{Read, Seek, Write};

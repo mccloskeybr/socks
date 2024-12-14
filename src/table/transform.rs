@@ -26,7 +26,7 @@ fn get_col_schema<'a>(schema: &'a TableSchema, col_name: &String) -> &'a ColumnS
 // TODO: validate no duplicate columns
 // TODO: validate keys specified first
 // TODO: validate column value match b/w op and schema
-pub fn insert_op(validated_op: InsertProto, schema: &TableSchema) -> (u32, InternalRowProto) {
+pub(crate) fn insert_op(validated_op: InsertProto, schema: &TableSchema) -> (u32, InternalRowProto) {
     let mut key = 0;
     let mut row = InternalRowProto::new();
     for col_val in &validated_op.column_values {
@@ -46,6 +46,6 @@ pub fn insert_op(validated_op: InsertProto, schema: &TableSchema) -> (u32, Inter
 
 // TODO: validate all keys present
 // TODO: validate all cols have values
-pub fn read_row_op(validated_op: ReadRowProto, schema: &TableSchema) -> u32 {
+pub(crate) fn read_row_op(validated_op: ReadRowProto, schema: &TableSchema) -> u32 {
     get_col_value_as_u32(&validated_op.key_value)
 }

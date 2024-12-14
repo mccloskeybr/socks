@@ -60,7 +60,7 @@ fn table_has_single_primary_key(schema: &TableSchema) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn schema(schema: &TableSchema) -> Result<(), Error> {
+pub(crate) fn schema(schema: &TableSchema) -> Result<(), Error> {
     table_has_name(&schema)?;
     table_has_single_primary_key(&schema)?;
     table_columns_have_types(&schema)?;

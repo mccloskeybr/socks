@@ -1,6 +1,5 @@
 use crate::error::*;
 use crate::protos::generated::chunk::*;
-use crate::table::file::*;
 use crate::table::table::*;
 use crate::LANE_WIDTH;
 use std::cmp::Ordering;

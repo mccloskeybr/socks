@@ -1,5 +1,6 @@
 mod bp_tree;
 mod cache;
-mod file;
-mod parse;
-pub mod table;
+mod chunk;
+pub(crate) mod table;
+mod transform;
+mod validate;

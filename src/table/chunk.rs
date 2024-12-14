@@ -74,7 +74,7 @@ fn chunk_to_bytes(config: &FileConfig, chunk: &ChunkProto) -> Result<Vec<u8>, Er
     Ok(bytes)
 }
 
-pub fn read_chunk_at<R: Read + Seek>(
+pub(crate) fn read_chunk_at<R: Read + Seek>(
     config: &FileConfig,
     reader: &mut R,
     chunk_offset: u32,
@@ -89,7 +89,7 @@ pub fn read_chunk_at<R: Read + Seek>(
     chunk_from_bytes(&bytes)
 }
 
-pub fn write_chunk_at<W: Write + Seek>(
+pub(crate) fn write_chunk_at<W: Write + Seek>(
     config: &FileConfig,
     writer: &mut W,
     chunk: ChunkProto,
@@ -105,7 +105,7 @@ pub fn write_chunk_at<W: Write + Seek>(
     Ok(())
 }
 
-pub fn would_chunk_overflow(config: &FileConfig, size: usize) -> bool {
+pub(crate) fn would_chunk_overflow(config: &FileConfig, size: usize) -> bool {
     let size_estimate = std::mem::size_of::<u16>() + size + config.chunk_overflow_size as usize;
     config.chunk_size <= size_estimate.try_into().unwrap()
 }

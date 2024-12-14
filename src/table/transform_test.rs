@@ -2,7 +2,7 @@ use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
-use crate::table::parse::transform::*;
+use crate::table::transform::*;
 use protobuf::text_format::parse_from_str;
 
 fn setup() {
