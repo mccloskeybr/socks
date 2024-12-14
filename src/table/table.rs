@@ -7,6 +7,7 @@ use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::table::bp_tree;
+use crate::table::cache::Cache;
 use crate::table::file::*;
 use crate::table::parse::*;
 use protobuf::Message;
@@ -20,6 +21,7 @@ use std::io::{Read, Seek, Write};
 
 pub struct Table<'a, F: 'a + Read + Write + Seek> {
     pub file: &'a mut F,
+    pub cache: Cache,
     pub metadata: TableMetadataProto,
     pub db_config: DatabaseConfig,
 }
@@ -39,18 +41,19 @@ impl<'a, F: 'a + Read + Write + Seek> Table<'a, F> {
         {
             let mut metadata_chunk = ChunkProto::new();
             metadata_chunk.set_metadata(metadata.clone());
-            chunk::write_chunk_at::<F>(&db_config.file, file, &metadata_chunk, 0)?;
+            chunk::write_chunk_at::<F>(&db_config.file, file, metadata_chunk, 0)?;
         }
         {
             let mut root_node_chunk = ChunkProto::new();
             let root_node: &mut NodeProto = root_node_chunk.mut_node();
             root_node.offset = 1;
             root_node.set_internal(InternalNodeProto::new());
-            chunk::write_chunk_at::<F>(&db_config.file, file, &root_node_chunk, 1)?;
+            chunk::write_chunk_at::<F>(&db_config.file, file, root_node_chunk, 1)?;
         }
 
         Ok(Self {
             file: file,
+            cache: Cache::default(),
             metadata: metadata,
             db_config: db_config,
         })

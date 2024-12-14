@@ -8,7 +8,8 @@ A small relational database engine written in Rust, primarily for educational be
 - Stores arbitrarily large datasets.
 - Structured operations for row insertion, retrieval.
 - SIMD-accelerated reads / writes.
-- Configurable algorithms benchmarking / experimentation.
+- LRU cache for accelerated reads.
+- Configurable algorithms for benchmarking / experimentation.
 
 ## User guide
 
@@ -97,7 +98,6 @@ the first 2 bytes of each chunk store the size of the wrapped proto.
 ### Roadmap
 
 - Multiple table support.
-- LRU cache.
 - Concurrent request processing.
 - Benchmarking suite.
 - Basic transaction support.

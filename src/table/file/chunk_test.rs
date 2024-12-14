@@ -27,7 +27,7 @@ fn read_write_single_chunk() -> Result<(), Error> {
 
     let mut chunk_in = ChunkProto::new();
     chunk_in.mut_metadata().next_chunk_offset = 1;
-    write_chunk_at(&context.config, &mut context.file, &chunk_in, 0)?;
+    write_chunk_at(&context.config, &mut context.file, chunk_in.clone(), 0)?;
     assert_eq!(
         context.file.get_ref().len(),
         context.config.chunk_size as usize
@@ -51,7 +51,12 @@ fn read_write_many_chunks() -> Result<(), Error> {
     }
 
     for i in 0..n {
-        write_chunk_at(&context.config, &mut context.file, &chunks[i as usize], i)?;
+        write_chunk_at(
+            &context.config,
+            &mut context.file,
+            chunks[i as usize].clone(),
+            i,
+        )?;
     }
     assert_eq!(
         context.file.get_ref().len(),
@@ -72,7 +77,7 @@ fn overwrite_chunk() -> Result<(), Error> {
 
     let mut chunk_1 = ChunkProto::new();
     chunk_1.mut_metadata().next_chunk_offset = 1;
-    write_chunk_at(&context.config, &mut context.file, &chunk_1, 0)?;
+    write_chunk_at(&context.config, &mut context.file, chunk_1.clone(), 0)?;
     assert_eq!(
         context.file.get_ref().len(),
         context.config.chunk_size as usize
@@ -80,7 +85,7 @@ fn overwrite_chunk() -> Result<(), Error> {
 
     let mut chunk_2 = ChunkProto::new();
     chunk_2.mut_metadata().next_chunk_offset = 2;
-    write_chunk_at(&context.config, &mut context.file, &chunk_2, 0)?;
+    write_chunk_at(&context.config, &mut context.file, chunk_2.clone(), 0)?;
     assert_eq!(
         context.file.get_ref().len(),
         context.config.chunk_size as usize
@@ -102,7 +107,7 @@ fn huge_chunk_fails_write() -> Result<(), Error> {
         node.mut_internal().keys.push(std::u32::MAX);
     }
     assert!(node.compute_size() > context.config.chunk_size as usize as u64);
-    match write_chunk_at(&context.config, &mut context.file, &chunk, 0) {
+    match write_chunk_at(&context.config, &mut context.file, chunk.clone(), 0) {
         Err(Error::OutOfBounds(..)) => return Ok(()),
         _ => panic!(),
     }

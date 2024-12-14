@@ -92,10 +92,10 @@ pub fn read_chunk_at<R: Read + Seek>(
 pub fn write_chunk_at<W: Write + Seek>(
     config: &FileConfig,
     writer: &mut W,
-    chunk: &ChunkProto,
+    chunk: ChunkProto,
     chunk_offset: u32,
 ) -> Result<(), Error> {
-    let bytes: Vec<u8> = chunk_to_bytes(config, chunk)?;
+    let bytes: Vec<u8> = chunk_to_bytes(config, &chunk)?;
     writer.seek(SeekFrom::Start(
         chunk_offset as u64 * config.chunk_size as u64,
     ))?;

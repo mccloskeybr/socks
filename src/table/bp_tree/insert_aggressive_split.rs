@@ -3,6 +3,7 @@ use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::table::bp_tree;
+use crate::table::cache;
 use crate::table::file::*;
 use crate::table::parse::*;
 use crate::table::table::*;
@@ -25,7 +26,7 @@ fn insert_non_full_leaf<F: Read + Write + Seek>(
 
     leaf.keys.insert(idx, key);
     leaf.rows.insert(idx, row);
-    row_data::commit_chunk(table, &node_chunk)?;
+    cache::write(table, &node_chunk)?;
     Ok(())
 }
 
@@ -44,8 +45,7 @@ fn insert_non_full_internal<F: Read + Write + Seek>(
         key,
     )?;
     debug_assert!(idx < node_chunk.node().internal().child_offsets.len());
-    let mut child_chunk =
-        row_data::read_chunk(table, node_chunk.node().internal().child_offsets[idx])?;
+    let mut child_chunk = cache::read(table, node_chunk.node().internal().child_offsets[idx])?;
     debug_assert!(child_chunk.has_node());
     match &child_chunk.mut_node().node_type {
         Some(node_proto::Node_type::Internal(_)) => {
@@ -106,9 +106,9 @@ fn split_child_leaf<F: Read + Write + Seek>(
         .child_offsets
         .insert(child_chunk_idx + 1, right_child.offset);
 
-    row_data::commit_chunk(table, left_child_chunk)?;
-    row_data::commit_chunk(table, &right_child_chunk)?;
-    row_data::commit_chunk(table, parent_chunk)?;
+    cache::write(table, left_child_chunk)?;
+    cache::write(table, &right_child_chunk)?;
+    cache::write(table, parent_chunk)?;
 
     Ok(right_child_chunk)
 }
@@ -143,9 +143,9 @@ fn split_child_internal<F: Read + Write + Seek>(
         .child_offsets
         .insert(child_chunk_idx + 1, right_child.offset);
 
-    row_data::commit_chunk(table, left_child_chunk)?;
-    row_data::commit_chunk(table, &right_child_chunk)?;
-    row_data::commit_chunk(table, parent_chunk)?;
+    cache::write(table, left_child_chunk)?;
+    cache::write(table, &right_child_chunk)?;
+    cache::write(table, parent_chunk)?;
 
     Ok(right_child_chunk)
 }
@@ -157,7 +157,7 @@ pub fn insert<F: Read + Write + Seek>(
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
-    let mut root_chunk = row_data::read_chunk(table, table.metadata.root_chunk_offset)?;
+    let mut root_chunk = cache::read(table, table.metadata.root_chunk_offset)?;
     debug_assert!(root_chunk.node().has_internal());
 
     if root_chunk.node().internal().keys.len() + root_chunk.node().internal().child_offsets.len()
@@ -178,8 +178,8 @@ pub fn insert<F: Read + Write + Seek>(
             .child_offsets
             .push(data.offset);
 
-        row_data::commit_chunk(table, &data_chunk)?;
-        row_data::commit_chunk(table, &root_chunk)?;
+        cache::write(table, &data_chunk)?;
+        cache::write(table, &root_chunk)?;
 
         metadata::commit_metadata(table)?;
         return Ok(());

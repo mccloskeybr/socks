@@ -1,6 +1,7 @@
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
+use crate::table::cache;
 use crate::table::file::*;
 use crate::table::table::*;
 use std::io::{Read, Seek, Write};
@@ -46,7 +47,7 @@ pub fn read_row<F: Read + Write + Seek>(
     curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
-    let curr_chunk: ChunkProto = row_data::read_chunk(table, curr_offset)?;
+    let curr_chunk: ChunkProto = cache::read(table, curr_offset)?;
     debug_assert!(curr_chunk.has_node());
     let node: &NodeProto = curr_chunk.node();
 
