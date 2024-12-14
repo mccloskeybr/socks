@@ -2,7 +2,7 @@ use crate::error::*;
 use crate::protos::generated::config::*;
 use std::collections::HashSet;
 
-fn table_has_name(schema: &IndexSchema) -> Result<(), Error> {
+fn table_has_name(schema: &TableSchema) -> Result<(), Error> {
     if schema.name.is_empty() {
         return Err(Error::InvalidArgument(
             "Table must be defined with a name!".into(),
@@ -11,7 +11,7 @@ fn table_has_name(schema: &IndexSchema) -> Result<(), Error> {
     Ok(())
 }
 
-fn table_columns_have_unique_names(schema: &IndexSchema) -> Result<(), Error> {
+fn table_columns_have_unique_names(schema: &TableSchema) -> Result<(), Error> {
     let mut names: HashSet<&String> = HashSet::new();
     for column in schema.columns.iter() {
         if column.name.is_empty() {
@@ -29,7 +29,7 @@ fn table_columns_have_unique_names(schema: &IndexSchema) -> Result<(), Error> {
     Ok(())
 }
 
-fn table_columns_have_types(schema: &IndexSchema) -> Result<(), Error> {
+fn table_columns_have_types(schema: &TableSchema) -> Result<(), Error> {
     for column in schema.columns.iter() {
         if column.type_.enum_value_or_default() == column_schema::Type::UNDEFINED {
             return Err(Error::InvalidArgument(
@@ -40,7 +40,7 @@ fn table_columns_have_types(schema: &IndexSchema) -> Result<(), Error> {
     Ok(())
 }
 
-fn table_has_single_primary_key(schema: &IndexSchema) -> Result<(), Error> {
+fn table_has_single_primary_key(schema: &TableSchema) -> Result<(), Error> {
     let mut primary_key_seen = false;
     for column in schema.columns.iter() {
         if column.is_key {
@@ -60,7 +60,7 @@ fn table_has_single_primary_key(schema: &IndexSchema) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn schema(schema: &IndexSchema) -> Result<(), Error> {
+pub fn schema(schema: &TableSchema) -> Result<(), Error> {
     table_has_name(&schema)?;
     table_has_single_primary_key(&schema)?;
     table_columns_have_types(&schema)?;

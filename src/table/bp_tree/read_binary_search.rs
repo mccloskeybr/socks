@@ -1,7 +1,7 @@
 use crate::error::*;
-use crate::file::*;
-use crate::index::*;
 use crate::protos::generated::chunk::*;
+use crate::table::file::*;
+use crate::table::table::*;
 use crate::{BINARY_READ_ITER_CUTOFF, LANE_WIDTH};
 use std::cmp::Ordering;
 use std::io::{Read, Seek, SeekFrom, Write};

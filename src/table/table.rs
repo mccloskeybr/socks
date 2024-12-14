@@ -1,39 +1,39 @@
 #[cfg(test)]
-#[path = "./index_test.rs"]
+#[path = "./table_test.rs"]
 mod test;
 
-use crate::bp_tree;
 use crate::error::*;
-use crate::file::*;
-use crate::parse::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
+use crate::table::bp_tree;
+use crate::table::file::*;
+use crate::table::parse::*;
 use protobuf::Message;
 use protobuf::MessageField;
 use std::io::{Read, Seek, Write};
 
-// Index file format:
+// Table file format:
 // Chunk 0:          Metadata chunk
 // Chunks 1 - n:     RowData directory chunks
 // Chunks n+1 - end: RowData chunks
 
-pub struct Index<'a, F: 'a + Read + Write + Seek> {
+pub struct Table<'a, F: 'a + Read + Write + Seek> {
     pub file: &'a mut F,
-    pub metadata: IndexMetadataProto,
+    pub metadata: TableMetadataProto,
     pub db_config: DatabaseConfig,
 }
 
-impl<'a, F: 'a + Read + Write + Seek> Index<'a, F> {
+impl<'a, F: 'a + Read + Write + Seek> Table<'a, F> {
     pub fn create(
         file: &'a mut F,
         db_config: DatabaseConfig,
-        index_config: IndexConfig,
+        table_config: TableConfig,
     ) -> Result<Self, Error> {
-        validate::schema(&index_config.schema)?;
+        validate::schema(&table_config.schema)?;
 
-        let mut metadata = IndexMetadataProto::new();
-        metadata.config = MessageField::some(index_config.clone());
+        let mut metadata = TableMetadataProto::new();
+        metadata.config = MessageField::some(table_config.clone());
         metadata.root_chunk_offset = 1;
         metadata.next_chunk_offset = 2;
         {

@@ -10,13 +10,13 @@ message ColumnSchema {
   bool is_key = 3;
 }
 
-message IndexSchema {
+message TableSchema {
   string name = 1;
   repeated ColumnSchema columns = 2;
 }
 
-message IndexConfig {
-  /* required */ IndexSchema schema = 1;
+message TableConfig {
+  /* required */ TableSchema schema = 1;
 
   enum InsertMethod {
     AGGRESSIVE_SPLIT = 0;

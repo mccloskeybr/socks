@@ -8,12 +8,12 @@ message ColumnValueProto {
 }
 
 message InsertProto {
-  string index_name = 1;
+  string table_name = 1;
   repeated ColumnValueProto column_values = 2;
 }
 
 message ReadRowProto {
-  string index_name = 1;
+  string table_name = 1;
   ColumnValueProto key_value = 2;
 }
 

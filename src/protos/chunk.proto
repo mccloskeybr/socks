@@ -4,13 +4,13 @@ import "config.proto";
 
 message ChunkProto {
   oneof chunk_type {
-    IndexMetadataProto metadata = 1;
+    TableMetadataProto metadata = 1;
     NodeProto node = 2;
   }
 }
 
-message IndexMetadataProto {
-  IndexConfig config = 1;
+message TableMetadataProto {
+  TableConfig config = 1;
   uint32 root_chunk_offset = 2;
   uint32 next_chunk_offset = 3;
 }

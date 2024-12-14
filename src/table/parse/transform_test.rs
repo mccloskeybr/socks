@@ -1,8 +1,8 @@
 use crate::error::*;
-use crate::parse::transform::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
+use crate::table::parse::transform::*;
 use protobuf::text_format::parse_from_str;
 
 fn setup() {
@@ -12,9 +12,9 @@ fn setup() {
 #[test]
 fn insert_op_success() -> Result<(), Error> {
     setup();
-    let schema = parse_from_str::<IndexSchema>(
+    let schema = parse_from_str::<TableSchema>(
         "
-        name: \"TestIndex\"
+        name: \"TestTable\"
         columns {
             name: \"Key\"
             type: INTEGER
@@ -28,7 +28,7 @@ fn insert_op_success() -> Result<(), Error> {
     .unwrap();
     let op = parse_from_str::<InsertProto>(
         "
-        index_name: \"TestIndex\"
+        table_name: \"TestTable\"
         column_values {
             name: \"Key\"
             int_value: 1

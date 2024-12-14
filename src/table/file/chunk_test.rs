@@ -1,6 +1,6 @@
 use crate::error::*;
-use crate::file::chunk::*;
 use crate::protos::generated::chunk::*;
+use crate::table::file::chunk::*;
 use protobuf::text_format::parse_from_str;
 
 struct TestContext {
