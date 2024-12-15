@@ -83,5 +83,8 @@ pub fn read_row<F: Read + Write + Seek>(
 ) -> Result<RowProto, Error> {
     let hashed_key = schema::get_hashed_col_value(&op.key_value);
     let internal_row = table::read_row(&mut db.table, hashed_key)?;
-    Ok(schema::internal_row_to_row(&internal_row, &db.table.metadata.schema))
+    Ok(schema::internal_row_to_row(
+        &internal_row,
+        &db.table.metadata.schema,
+    ))
 }

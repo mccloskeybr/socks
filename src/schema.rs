@@ -14,14 +14,6 @@ fn get_index_key_value(index_schema: &TableSchema, row: &RowProto) -> ColumnProt
     todo!();
 }
 
-pub(crate) fn get_hashed_col_value(col_val: &ColumnProto) -> u32 {
-    match col_val.value {
-        Some(column_proto::Value::IntValue(i)) => i as u32,
-        Some(column_proto::Value::UintValue(u)) => u,
-        None => unreachable!(),
-    }
-}
-
 pub(crate) fn get_primary_key<'a>(schema: &'a TableSchema) -> &'a ColumnSchema {
     for col in &schema.columns {
         if col.is_key {
@@ -55,18 +47,43 @@ pub(crate) fn get_hashed_key_from_row(row: &RowProto, schema: &TableSchema) -> u
     todo!();
 }
 
+pub(crate) fn get_hashed_col_value(col_val: &ColumnProto) -> u32 {
+    match col_val.value {
+        Some(column_proto::Value::IntValue(i)) => i as u32,
+        Some(column_proto::Value::UintValue(u)) => u,
+        None => unreachable!(),
+    }
+}
+
+pub(crate) fn col_to_internal_col(col: &ColumnProto) -> InternalColumnProto {
+    let mut internal_col = InternalColumnProto::new();
+    match col.value {
+        Some(column_proto::Value::IntValue(i)) => internal_col.set_int_value(i),
+        Some(column_proto::Value::UintValue(u)) => internal_col.set_uint_value(u),
+        None => unreachable!(),
+    };
+    internal_col
+}
+
+pub(crate) fn internal_col_to_col(
+    internal_column: &InternalColumnProto,
+    column_schema: &ColumnSchema,
+) -> ColumnProto {
+    let mut column = ColumnProto::new();
+    column.name = column_schema.name.clone();
+    match internal_column.column_type {
+        None => {}
+        Some(internal_column_proto::Column_type::IntValue(i)) => column.set_int_value(i),
+        Some(internal_column_proto::Column_type::UintValue(u)) => column.set_uint_value(u),
+    }
+    column
+}
+
 // TODO: this doesn't do any validations currently.
 pub(crate) fn row_to_internal_row(row: &RowProto, schema: &TableSchema) -> InternalRowProto {
-    let mut key = 0;
     let mut internal_row = InternalRowProto::new();
     for col in &row.columns {
-        let mut internal_col = InternalColumnProto::new();
-        match col.value {
-            Some(column_proto::Value::IntValue(i)) => internal_col.set_int_value(i),
-            Some(column_proto::Value::UintValue(u)) => internal_col.set_uint_value(u),
-            None => unreachable!(),
-        };
-        internal_row.col_values.push(internal_col);
+        internal_row.col_values.push(col_to_internal_col(col));
     }
     internal_row
 }
@@ -79,16 +96,7 @@ pub(crate) fn internal_row_to_row(
         .col_values
         .iter()
         .zip(schema.columns.iter())
-        .map(|(internal_column, column_schema)| {
-            let mut column = ColumnProto::new();
-            column.name = column_schema.name.clone();
-            match internal_column.column_type {
-                None => {}
-                Some(internal_column_proto::Column_type::IntValue(i)) => column.set_int_value(i),
-                Some(internal_column_proto::Column_type::UintValue(u)) => column.set_uint_value(u),
-            }
-            column
-        })
+        .map(|(internal_column, column_schema)| internal_col_to_col(internal_column, column_schema))
         .collect();
 
     let mut row = RowProto::new();
