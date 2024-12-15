@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-message ColumnValueProto {
+message ColumnProto {
   string name = 1;
   oneof value {
     int32 int_value = 2;
@@ -8,13 +8,16 @@ message ColumnValueProto {
   }
 }
 
+message RowProto {
+  repeated ColumnProto columns = 1;
+}
+
 message InsertProto {
-  repeated ColumnValueProto column_values = 2;
+  RowProto row = 1;
 }
 
 message ReadRowProto {
-  string table_name = 1;
-  ColumnValueProto key_value = 2;
+  ColumnProto key_value = 2;
 }
 
 message OperationProto {

@@ -57,20 +57,31 @@ pub fn create(
 
 // TODO: parallel insertion, failure recovery.
 pub fn insert<F: Read + Write + Seek>(db: &mut Database<F>, op: InsertProto) -> Result<(), Error> {
-    let table_key = schema::get_hashed_key(&db.table.metadata.schema, &op.column_values);
-    let table_row = schema::to_row(&db.table.metadata.schema, &op.column_values);
-    table::insert(&mut db.table, table_key, table_row)?;
+    let table_key = schema::get_hashed_key_from_row(&op.row, &db.table.metadata.schema);
+    let table_row_internal = schema::row_to_internal_row(&op.row, &db.table.metadata.schema);
+    table::insert(&mut db.table, table_key, table_row_internal)?;
 
     for secondary_index in &mut db.secondary_indexes {
-        let index_cols = schema::create_index_cols(
+        let index_row = schema::table_row_to_index_row(
+            &op.row,
             &secondary_index.metadata.schema.as_ref().unwrap(),
-            &op.column_values,
             table_key,
         );
-        let index_key = schema::get_hashed_key(&secondary_index.metadata.schema, &index_cols);
-        let index_row = schema::to_row(&secondary_index.metadata.schema, &index_cols);
-        table::insert(secondary_index, index_key, index_row);
+        let index_key =
+            schema::get_hashed_key_from_row(&index_row, &secondary_index.metadata.schema);
+        let index_row_internal =
+            schema::row_to_internal_row(&index_row, &secondary_index.metadata.schema);
+        table::insert(secondary_index, index_key, index_row_internal);
     }
 
     Ok(())
+}
+
+pub fn read_row<F: Read + Write + Seek>(
+    db: &mut Database<F>,
+    op: ReadRowProto,
+) -> Result<RowProto, Error> {
+    let hashed_key = schema::get_hashed_col_value(&op.key_value);
+    let internal_row = table::read_row(&mut db.table, hashed_key)?;
+    Ok(schema::internal_row_to_row(&internal_row, &db.table.metadata.schema))
 }

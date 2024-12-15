@@ -84,32 +84,76 @@ fn insert_single_success() -> Result<(), Error> {
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
-        column_values {
-            name: \"Key\"
-            int_value: 1
-        }
-        column_values {
-            name: \"Value\"
-            int_value: 2
+        row {
+            columns {
+                name: \"Key\"
+                int_value: 1
+            }
+            columns {
+                name: \"Value\"
+                int_value: 2
+            }
         }
         ",
     )?;
     insert(&mut db, insert_operation.clone())?;
 
-    let expected_table_row =
-        schema::to_row(&db.table.metadata.schema, &insert_operation.column_values);
-    let table_row = table::read_row(&mut db.table, 1)?;
-    assert_eq!(expected_table_row, table_row);
+    // row in primary index
+    {
+        let expected_table_row_internal =
+            schema::row_to_internal_row(&insert_operation.row, &db.table.metadata.schema);
+        let table_row_internal = table::read_row(&mut db.table, 1)?;
+        assert_eq!(expected_table_row_internal, table_row_internal);
+    }
+    // row in secondary index
+    {
+        let secondary_index = &mut db.secondary_indexes[0];
+        let index_row = schema::table_row_to_index_row(
+            &insert_operation.row,
+            &secondary_index.metadata.schema.as_ref().unwrap(),
+            1,
+        );
+        let expected_index_row_internal =
+            schema::row_to_internal_row(&index_row, &secondary_index.metadata.schema);
+        let index_row_internal = table::read_row(secondary_index, 2)?;
+        assert_eq!(expected_index_row_internal, index_row_internal);
+    }
 
-    let secondary_index = &mut db.secondary_indexes[0];
-    let index_cols = schema::create_index_cols(
-        &secondary_index.metadata.schema.as_ref().unwrap(),
-        &insert_operation.column_values,
-        1,
-    );
-    let expected_index_row = schema::to_row(&secondary_index.metadata.schema, &index_cols);
-    let index_row = table::read_row(secondary_index, 2)?;
-    assert_eq!(expected_table_row, table_row);
+    Ok(())
+}
+
+#[test]
+fn read_single_success() -> Result<(), Error> {
+    let mut context = setup();
+    let mut db = create_for_test(context.config, context.schema)?;
+
+    let insert_operation = parse_from_str::<InsertProto>(
+        "
+        row {
+            columns {
+                name: \"Key\"
+                int_value: 1
+            }
+            columns {
+                name: \"Value\"
+                int_value: 2
+            }
+        }
+        ",
+    )?;
+    insert(&mut db, insert_operation.clone())?;
+
+    let read_operation = parse_from_str::<ReadRowProto>(
+        "
+        key_value {
+            name: \"Key\"
+            int_value: 1
+        }
+        ",
+    )?;
+    let row = read_row(&mut db, read_operation);
+
+    assert_eq!(insert_operation.row.unwrap(), row.unwrap());
 
     Ok(())
 }
