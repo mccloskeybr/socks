@@ -5,39 +5,40 @@ message ColumnSchema {
   enum Type {
     UNDEFINED = 0;
     INTEGER = 1;
+    UNSIGNED_INTEGER = 2;
   }
   Type type = 2;
   bool is_key = 3;
 }
 
 message TableSchema {
-  string name = 1;
   repeated ColumnSchema columns = 2;
 }
 
+message IndexSchema {
+  /* required */ ColumnSchema column = 1;
+}
+
+message DatabaseSchema {
+  /* required */ TableSchema table = 1;
+  repeated IndexSchema secondary_indexes = 2;
+}
+
 message TableConfig {
-  /* required */ TableSchema schema = 1;
+  // The maximum size of each chunk on disk.
+  /* required */ uint32 chunk_size = 1;
+
+  // The amount of space remaining in a chunk to consider it full.
+  /* required */ uint32 chunk_overflow_size = 2;
 
   enum InsertMethod {
     AGGRESSIVE_SPLIT = 0;
   }
-  InsertMethod insert_method = 2;
+  InsertMethod insert_method = 3;
 
   enum ReadMethod {
     BINARY_SEARCH = 0;
     INCREMENTAL = 1;
   }
-  ReadMethod read_method = 3;
-}
-
-message FileConfig {
-  // The maximum size of each chunk on disk.
-  /* required */ uint32 chunk_size = 2;
-
-  // The amount of space remaining in a chunk to consider it full.
-  /* required */ uint32 chunk_overflow_size = 3;
-}
-
-message DatabaseConfig {
-  /* required */ FileConfig file = 1;
+  ReadMethod read_method = 4;
 }

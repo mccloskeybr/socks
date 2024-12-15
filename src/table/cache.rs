@@ -50,7 +50,7 @@ pub fn read<F: Read + Write + Seek>(
     let (idx, in_cache) = find_idx(cache, offset);
     if !in_cache {
         cache.entries[idx].chunk =
-            chunk::read_chunk_at::<F>(&table.db_config.file, &mut table.file, offset)?;
+            chunk::read_chunk_at::<F>(&table.metadata.config, &mut table.file, offset)?;
     }
     cache.entries[idx].counter = next_counter(cache);
     Ok(cache.entries[idx].chunk.clone())
@@ -66,7 +66,7 @@ pub fn write<F: Read + Write + Seek>(
     cache.entries[idx].chunk = chunk.clone();
     cache.entries[idx].counter = next_counter(cache);
     chunk::write_chunk_at::<F>(
-        &table.db_config.file,
+        &table.metadata.config,
         &mut table.file,
         cache.entries[idx].chunk.clone(),
         cache.entries[idx].chunk.node().offset,

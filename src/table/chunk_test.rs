@@ -5,14 +5,14 @@ use protobuf::text_format::parse_from_str;
 
 struct TestContext {
     file: std::io::Cursor<Vec<u8>>,
-    config: FileConfig,
+    config: TableConfig,
 }
 
 fn setup() -> TestContext {
     let _ = env_logger::builder().is_test(true).try_init();
     TestContext {
         file: std::io::Cursor::<Vec<u8>>::new(Vec::new()),
-        config: parse_from_str::<FileConfig>(
+        config: parse_from_str::<TableConfig>(
             "
             chunk_size: 512
             chunk_overflow_size: 10",

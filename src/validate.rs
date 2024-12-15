@@ -2,15 +2,6 @@ use crate::error::*;
 use crate::protos::generated::config::*;
 use std::collections::HashSet;
 
-fn table_has_name(schema: &TableSchema) -> Result<(), Error> {
-    if schema.name.is_empty() {
-        return Err(Error::InvalidArgument(
-            "Table must be defined with a name!".into(),
-        ));
-    }
-    Ok(())
-}
-
 fn table_columns_have_unique_names(schema: &TableSchema) -> Result<(), Error> {
     let mut names: HashSet<&String> = HashSet::new();
     for column in schema.columns.iter() {
@@ -61,7 +52,6 @@ fn table_has_single_primary_key(schema: &TableSchema) -> Result<(), Error> {
 }
 
 pub(crate) fn schema(schema: &TableSchema) -> Result<(), Error> {
-    table_has_name(&schema)?;
     table_has_single_primary_key(&schema)?;
     table_columns_have_types(&schema)?;
     table_columns_have_unique_names(&schema)?;

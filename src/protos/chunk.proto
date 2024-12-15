@@ -11,8 +11,9 @@ message ChunkProto {
 
 message TableMetadataProto {
   TableConfig config = 1;
-  uint32 root_chunk_offset = 2;
-  uint32 next_chunk_offset = 3;
+  TableSchema schema = 2;
+  uint32 root_chunk_offset = 3;
+  uint32 next_chunk_offset = 4;
 }
 
 message DirectoryProto {
@@ -54,7 +55,7 @@ message InternalRowProto {
 
 message InternalColumnProto {
   oneof column_type {
-    bool is_empty = 1;
-    int32 int_value = 2;
+    int32 int_value = 1;
+    uint32 uint_value = 2;
   }
 }

@@ -4,11 +4,11 @@ message ColumnValueProto {
   string name = 1;
   oneof value {
     int32 int_value = 2;
+    uint32 uint_value = 3;
   }
 }
 
 message InsertProto {
-  string table_name = 1;
   repeated ColumnValueProto column_values = 2;
 }
 

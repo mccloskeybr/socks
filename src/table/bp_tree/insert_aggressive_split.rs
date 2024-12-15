@@ -49,7 +49,7 @@ fn insert_non_full_internal<F: Read + Write + Seek>(
     match &child_chunk.mut_node().node_type {
         Some(node_proto::Node_type::Internal(_)) => {
             if chunk::would_chunk_overflow(
-                &table.db_config.file,
+                &table.metadata.config,
                 child_chunk.compute_size() as usize + std::mem::size_of::<i32>(),
             ) {
                 let right_child = split_child_internal(table, node_chunk, &mut child_chunk, idx)?;
@@ -61,7 +61,7 @@ fn insert_non_full_internal<F: Read + Write + Seek>(
         }
         Some(node_proto::Node_type::Leaf(_)) => {
             if chunk::would_chunk_overflow(
-                &table.db_config.file,
+                &table.metadata.config,
                 child_chunk.compute_size() as usize + row.compute_size() as usize,
             ) {
                 let right_child = split_child_leaf(table, node_chunk, &mut child_chunk, idx)?;
@@ -185,7 +185,7 @@ pub fn insert<F: Read + Write + Seek>(
     }
 
     if chunk::would_chunk_overflow(
-        &table.db_config.file,
+        &table.metadata.config,
         root_chunk.compute_size() as usize + std::mem::size_of::<i32>(),
     ) {
         log::trace!("Root overflow detected.");

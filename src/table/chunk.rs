@@ -61,7 +61,7 @@ fn write_data_update_cursor(
     Ok(())
 }
 
-fn chunk_to_bytes(config: &FileConfig, chunk: &ChunkProto) -> Result<Vec<u8>, Error> {
+fn chunk_to_bytes(config: &TableConfig, chunk: &ChunkProto) -> Result<Vec<u8>, Error> {
     let data: Vec<u8> = chunk.write_to_bytes()?;
     let data_len: u16 = data.len().try_into().unwrap();
 
@@ -75,7 +75,7 @@ fn chunk_to_bytes(config: &FileConfig, chunk: &ChunkProto) -> Result<Vec<u8>, Er
 }
 
 pub(crate) fn read_chunk_at<R: Read + Seek>(
-    config: &FileConfig,
+    config: &TableConfig,
     reader: &mut R,
     chunk_offset: u32,
 ) -> Result<ChunkProto, Error> {
@@ -90,7 +90,7 @@ pub(crate) fn read_chunk_at<R: Read + Seek>(
 }
 
 pub(crate) fn write_chunk_at<W: Write + Seek>(
-    config: &FileConfig,
+    config: &TableConfig,
     writer: &mut W,
     chunk: ChunkProto,
     chunk_offset: u32,
@@ -105,7 +105,7 @@ pub(crate) fn write_chunk_at<W: Write + Seek>(
     Ok(())
 }
 
-pub(crate) fn would_chunk_overflow(config: &FileConfig, size: usize) -> bool {
+pub(crate) fn would_chunk_overflow(config: &TableConfig, size: usize) -> bool {
     let size_estimate = std::mem::size_of::<u16>() + size + config.chunk_overflow_size as usize;
     config.chunk_size <= size_estimate.try_into().unwrap()
 }
