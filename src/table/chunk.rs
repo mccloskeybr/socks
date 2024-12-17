@@ -3,6 +3,7 @@
 mod test;
 
 use crate::error::*;
+use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::stats;
@@ -74,9 +75,9 @@ fn chunk_to_bytes(config: &TableConfig, chunk: &ChunkProto) -> Result<Vec<u8>, E
     Ok(bytes)
 }
 
-pub(crate) fn read_chunk_at<R: Read + Seek>(
+pub(crate) fn read_chunk_at<F: Filelike>(
     config: &TableConfig,
-    reader: &mut R,
+    reader: &mut F,
     chunk_offset: u32,
 ) -> Result<ChunkProto, Error> {
     let mut bytes: Vec<u8> = Vec::with_capacity(config.chunk_size as usize);
@@ -89,9 +90,9 @@ pub(crate) fn read_chunk_at<R: Read + Seek>(
     chunk_from_bytes(&bytes)
 }
 
-pub(crate) fn write_chunk_at<W: Write + Seek>(
+pub(crate) fn write_chunk_at<F: Filelike>(
     config: &TableConfig,
-    writer: &mut W,
+    writer: &mut F,
     chunk: ChunkProto,
     chunk_offset: u32,
 ) -> Result<(), Error> {

@@ -1,9 +1,9 @@
 use crate::error::*;
+use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::table::cache;
 use crate::table::table::*;
-use std::io::{Read, Seek, Write};
 
 mod insert_aggressive_split;
 mod read_binary_search;
@@ -41,7 +41,7 @@ pub fn find_row_idx_for_key(config: &TableConfig, leaf: &LeafNodeProto, key: u32
 }
 
 // finds the row with the associated key, else returns NotFound.
-pub fn read_row<F: Read + Write + Seek>(
+pub fn read_row<F: Filelike>(
     table: &mut Table<F>,
     curr_offset: u32,
     key: u32,
@@ -72,7 +72,7 @@ pub fn read_row<F: Read + Write + Seek>(
 }
 
 // inserts the row with the associated key into the table.
-pub fn insert<F: Read + Write + Seek>(
+pub fn insert<F: Filelike>(
     table: &mut Table<F>,
     key: u32,
     row: InternalRowProto,

@@ -3,6 +3,7 @@
 mod test;
 
 use crate::error::*;
+use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
@@ -18,13 +19,13 @@ use std::io::{Read, Seek, Write};
 // Chunks 1 - n:     RowData directory chunks
 // Chunks n+1 - end: RowData chunks
 
-pub(crate) struct Table<F: Read + Write + Seek> {
+pub(crate) struct Table<F: Filelike> {
     pub(crate) file: F,
     pub(crate) cache: Cache,
     pub(crate) metadata: TableMetadataProto,
 }
 
-pub(crate) fn create<F: Read + Write + Seek>(
+pub(crate) fn create<F: Filelike>(
     mut file: F,
     config: TableConfig,
     schema: TableSchema,
@@ -54,13 +55,13 @@ pub(crate) fn create<F: Read + Write + Seek>(
     })
 }
 
-pub(crate) fn next_chunk_offset<F: Read + Write + Seek>(table: &mut Table<F>) -> u32 {
+pub(crate) fn next_chunk_offset<F: Filelike>(table: &mut Table<F>) -> u32 {
     let offset = table.metadata.next_chunk_offset;
     table.metadata.next_chunk_offset += 1;
     offset
 }
 
-pub(crate) fn commit_metadata<F: Read + Write + Seek>(table: &mut Table<F>) -> Result<(), Error> {
+pub(crate) fn commit_metadata<F: Filelike>(table: &mut Table<F>) -> Result<(), Error> {
     log::trace!("Committing metadata.");
     let mut metadata_chunk = ChunkProto::new();
     metadata_chunk.set_metadata(table.metadata.clone());
@@ -73,7 +74,7 @@ pub(crate) fn commit_metadata<F: Read + Write + Seek>(table: &mut Table<F>) -> R
     Ok(())
 }
 
-pub(crate) fn insert<F: Read + Write + Seek>(
+pub(crate) fn insert<F: Filelike>(
     table: &mut Table<F>,
     key: u32,
     row: InternalRowProto,
@@ -82,7 +83,7 @@ pub(crate) fn insert<F: Read + Write + Seek>(
     bp_tree::insert(table, key, row)
 }
 
-pub(crate) fn read_row<F: Read + Write + Seek>(
+pub(crate) fn read_row<F: Filelike>(
     table: &mut Table<F>,
     key: u32,
 ) -> Result<InternalRowProto, Error> {

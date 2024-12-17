@@ -3,36 +3,11 @@ use crate::error::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::table::table;
+use crate::table::table::Table;
 use protobuf::text_format::parse_from_str;
+use std::cell::RefCell;
 use std::io::Cursor;
-
-pub fn create_for_test(
-    config: TableConfig,
-    schema: DatabaseSchema,
-) -> Result<Database<Cursor<Vec<u8>>>, Error> {
-    let table = table::create(
-        Cursor::<Vec<u8>>::new(Vec::new()),
-        config.clone(),
-        schema.table.clone().unwrap(),
-    )?;
-
-    let mut secondary_indexes = Vec::<table::Table<Cursor<Vec<u8>>>>::new();
-    for secondary_index_schema in schema.secondary_indexes {
-        secondary_indexes.push(table::create(
-            Cursor::<Vec<u8>>::new(Vec::new()),
-            config.clone(),
-            schema::create_table_schema_for_index(
-                &secondary_index_schema,
-                &schema.table.as_ref().unwrap(),
-            ),
-        )?);
-    }
-
-    Ok(Database {
-        table: table,
-        secondary_indexes: secondary_indexes,
-    })
-}
+use std::rc::Rc;
 
 struct TestContext {
     config: TableConfig,
@@ -80,7 +55,7 @@ fn setup() -> TestContext {
 #[test]
 fn insert_single_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = create_for_test(context.config, context.schema)?;
+    let mut db = create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -101,8 +76,8 @@ fn insert_single_success() -> Result<(), Error> {
     // row in primary index
     {
         let expected_table_row_internal =
-            schema::row_to_internal_row(&insert_operation.row, &db.table.metadata.schema);
-        let table_row_internal = table::read_row(&mut db.table, 1)?;
+            schema::row_to_internal_row(&insert_operation.row, &db.table.borrow().metadata.schema);
+        let table_row_internal = table::read_row(&mut db.table.borrow_mut(), 1)?;
         assert_eq!(expected_table_row_internal, table_row_internal);
     }
     // row in secondary index
@@ -110,12 +85,12 @@ fn insert_single_success() -> Result<(), Error> {
         let secondary_index = &mut db.secondary_indexes[0];
         let index_row = schema::table_row_to_index_row(
             &insert_operation.row,
-            &secondary_index.metadata.schema.as_ref().unwrap(),
+            &secondary_index.borrow().metadata.schema.as_ref().unwrap(),
             1,
         );
         let expected_index_row_internal =
-            schema::row_to_internal_row(&index_row, &secondary_index.metadata.schema);
-        let index_row_internal = table::read_row(secondary_index, 2)?;
+            schema::row_to_internal_row(&index_row, &secondary_index.borrow().metadata.schema);
+        let index_row_internal = table::read_row(&mut secondary_index.borrow_mut(), 2)?;
         assert_eq!(expected_index_row_internal, index_row_internal);
     }
 
@@ -125,7 +100,7 @@ fn insert_single_success() -> Result<(), Error> {
 #[test]
 fn read_single_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = create_for_test(context.config, context.schema)?;
+    let mut db = create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "

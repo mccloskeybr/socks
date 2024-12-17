@@ -1,4 +1,5 @@
 use crate::error::*;
+use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
@@ -9,9 +10,8 @@ use crate::table::*;
 use crate::LANE_WIDTH;
 use protobuf::Message;
 use protobuf::MessageField;
-use std::io::{Read, Seek, Write};
 
-fn insert_non_full_leaf<F: Read + Write + Seek>(
+fn insert_non_full_leaf<F: Filelike>(
     table: &mut Table<F>,
     node_chunk: &mut ChunkProto,
     key: u32,
@@ -29,7 +29,7 @@ fn insert_non_full_leaf<F: Read + Write + Seek>(
     Ok(())
 }
 
-fn insert_non_full_internal<F: Read + Write + Seek>(
+fn insert_non_full_internal<F: Filelike>(
     table: &mut Table<F>,
     node_chunk: &mut ChunkProto,
     key: u32,
@@ -75,7 +75,7 @@ fn insert_non_full_internal<F: Read + Write + Seek>(
     }
 }
 
-fn split_child_leaf<F: Read + Write + Seek>(
+fn split_child_leaf<F: Filelike>(
     table: &mut Table<F>,
     parent_chunk: &mut ChunkProto,
     left_child_chunk: &mut ChunkProto,
@@ -112,7 +112,7 @@ fn split_child_leaf<F: Read + Write + Seek>(
     Ok(right_child_chunk)
 }
 
-fn split_child_internal<F: Read + Write + Seek>(
+fn split_child_internal<F: Filelike>(
     table: &mut Table<F>,
     parent_chunk: &mut ChunkProto,
     left_child_chunk: &mut ChunkProto,
@@ -151,7 +151,7 @@ fn split_child_internal<F: Read + Write + Seek>(
 
 // NOTE: https://www.geeksforgeeks.org/insertion-in-a-b-tree/
 // TODO: ensure key doesn't already exist
-pub fn insert<F: Read + Write + Seek>(
+pub fn insert<F: Filelike>(
     table: &mut Table<F>,
     key: u32,
     row: InternalRowProto,

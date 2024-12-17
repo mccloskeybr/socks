@@ -1,19 +1,19 @@
 use crate::error::*;
+use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::table::chunk;
 use crate::table::table::*;
 use crate::CACHE_SIZE;
-use std::io::{Read, Seek, Write};
 
 // TODO: for concurrency support, could expose the entry directly, along with
 // some locking mechanism (per-chunk).
-#[derive(Default)]
+#[derive(Default, Clone)]
 struct CacheEntry {
     chunk: ChunkProto,
     counter: usize,
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct Cache {
     entries: [CacheEntry; CACHE_SIZE],
     next_counter: usize,
@@ -42,10 +42,7 @@ fn find_idx(cache: &Cache, offset: u32) -> (usize, bool) {
 }
 
 // TODO: currently copies chunk data, could use Arc if more efficient?
-pub fn read<F: Read + Write + Seek>(
-    table: &mut Table<F>,
-    offset: u32,
-) -> Result<ChunkProto, Error> {
+pub fn read<F: Filelike>(table: &mut Table<F>, offset: u32) -> Result<ChunkProto, Error> {
     let cache = &mut table.cache;
     let (idx, in_cache) = find_idx(cache, offset);
     if !in_cache {
@@ -57,10 +54,7 @@ pub fn read<F: Read + Write + Seek>(
 }
 
 // TODO: currently copies data 2x. copy + move possible?
-pub fn write<F: Read + Write + Seek>(
-    table: &mut Table<F>,
-    chunk: &ChunkProto,
-) -> Result<(), Error> {
+pub fn write<F: Filelike>(table: &mut Table<F>, chunk: &ChunkProto) -> Result<(), Error> {
     let cache = &mut table.cache;
     let (idx, _) = find_idx(cache, chunk.node().offset);
     cache.entries[idx].chunk = chunk.clone();

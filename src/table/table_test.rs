@@ -6,7 +6,7 @@ use protobuf::text_format::parse_from_str;
 use std::io::Cursor;
 
 struct TestContext {
-    file: std::io::Cursor<Vec<u8>>,
+    file: Cursor<Vec<u8>>,
     schema: TableSchema,
     config: TableConfig,
 }
@@ -52,7 +52,7 @@ fn validate_node_sorted(node: &NodeProto) {
 #[test]
 fn create_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = create(&mut context.file, context.config, context.schema)?;
+    let mut table = create(context.file, context.config, context.schema)?;
     assert_eq!(
         table.file.get_ref().len(),
         (table.metadata.config.chunk_size * 2) as usize
@@ -75,7 +75,7 @@ fn create_ok() -> Result<(), Error> {
 #[test]
 fn insert_single_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = create(&mut context.file, context.config, context.schema)?;
+    let mut table = create(context.file, context.config, context.schema)?;
 
     let mut col = InternalColumnProto::new();
     col.set_int_value(1);
@@ -110,7 +110,7 @@ fn insert_single_ok() -> Result<(), Error> {
 #[test]
 fn insert_sorted() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = create(&mut context.file, context.config, context.schema)?;
+    let mut table = create(context.file, context.config, context.schema)?;
 
     let mut col_1 = InternalColumnProto::new();
     col_1.set_int_value(1);
@@ -158,7 +158,7 @@ fn insert_sorted() -> Result<(), Error> {
 #[test]
 fn insert_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = create(&mut context.file, context.config, context.schema)?;
+    let mut table = create(context.file, context.config, context.schema)?;
 
     for i in 0..60 {
         let mut col = InternalColumnProto::new();
@@ -189,7 +189,7 @@ fn insert_many_ok() -> Result<(), Error> {
 #[test]
 fn read_row_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = create(&mut context.file, context.config, context.schema)?;
+    let mut table = create(context.file, context.config, context.schema)?;
     let row = parse_from_str::<InternalRowProto>("col_values { int_value: 1 }")?;
     insert(&mut table, 1, row.clone())?;
     let read_result: InternalRowProto = read_row(&mut table, 1)?;
@@ -200,7 +200,7 @@ fn read_row_ok() -> Result<(), Error> {
 #[test]
 fn read_row_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = create(&mut context.file, context.config, context.schema)?;
+    let mut table = create(context.file, context.config, context.schema)?;
     let num_iter = 100;
 
     for i in 0..num_iter {
