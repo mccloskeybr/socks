@@ -6,6 +6,9 @@ use crate::protos::generated::operations::*;
 mod filter;
 mod intersect;
 
+// go the oo route of having some kind of "is_ready" method?
+//   - executor iterates through and pauses on "is_ready" check
+//   - is_ready check waits for the presence of the output files from prev. dep
 trait QueryStage {
     fn execute(&self) -> Result<(), Error>;
 }
