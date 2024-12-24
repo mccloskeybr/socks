@@ -6,7 +6,7 @@ A small relational database engine written in Rust, primarily for educational be
 
 - Tabular data abstraction.
 - Stores arbitrarily large datasets.
-- Structured operations for row insertion, retrieval.
+- Structured operations for row insertion, retrieval, basic structured queries.
 - SIMD-accelerated reads / writes.
 - LRU cache for accelerated reads.
 - Configurable algorithms for benchmarking / experimentation.
@@ -101,7 +101,6 @@ the first 2 bytes of each chunk store the size of the wrapped proto.
 - Concurrent request processing.
 - Benchmarking suite.
 - Basic transaction support.
-- SQL-like generalizable queries.
 - Persistent access via. sockets.
 
 ### Optimizations
