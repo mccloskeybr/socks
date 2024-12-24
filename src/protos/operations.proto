@@ -21,23 +21,24 @@ message ReadRowProto {
 }
 
 message QueryProto {
-  QueryStageProto input = 2;
-}
-
-message QueryStageProto {
   oneof stage_type {
     IntersectProto intersect = 1;
     FilterProto filter = 2;
+    LookupProto lookup = 3;
   }
 }
 
 message IntersectProto {
-  QueryStageProto dependency_1 = 1;
-  QueryStageProto dependency_2 = 2;
+  QueryProto lhs = 1;
+  QueryProto rhs = 2;
 }
 
 message FilterProto {
   oneof filter_type {
     ColumnProto column_equals = 1;
   }
+}
+
+message LookupProto {
+  QueryProto dep = 1;
 }

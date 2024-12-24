@@ -22,7 +22,7 @@ fn table_columns_have_unique_names(schema: &TableSchema) -> Result<(), Error> {
 
 fn table_columns_have_types(schema: &TableSchema) -> Result<(), Error> {
     for column in schema.columns.iter() {
-        if column.type_.enum_value_or_default() == column_schema::Type::UNDEFINED {
+        if column.column_type.enum_value_or_default() == column_schema::ColumnType::UNDEFINED {
             return Err(Error::InvalidArgument(
                 "All columns must have a defined type!".into(),
             ));
@@ -31,28 +31,7 @@ fn table_columns_have_types(schema: &TableSchema) -> Result<(), Error> {
     Ok(())
 }
 
-fn table_has_single_primary_key(schema: &TableSchema) -> Result<(), Error> {
-    let mut primary_key_seen = false;
-    for column in schema.columns.iter() {
-        if column.is_key {
-            if primary_key_seen {
-                return Err(Error::InvalidArgument(
-                    "Multiple primary keys defined!".into(),
-                ));
-            }
-            primary_key_seen = true;
-        }
-    }
-    if primary_key_seen == false {
-        return Err(Error::InvalidArgument(
-            "A single primary key must be defined per table!".into(),
-        ));
-    }
-    Ok(())
-}
-
 pub(crate) fn schema(schema: &TableSchema) -> Result<(), Error> {
-    table_has_single_primary_key(&schema)?;
     table_columns_have_types(&schema)?;
     table_columns_have_unique_names(&schema)?;
     Ok(())

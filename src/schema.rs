@@ -1,50 +1,20 @@
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
+use std::iter;
 
-fn get_index_key_value(index_schema: &TableSchema, row: &RowProto) -> ColumnProto {
+pub(crate) fn get_col<'a>(row: &'a RowProto, col_name: &str) -> &'a ColumnProto {
     for col in &row.columns {
-        let col_schema = get_col_schema(index_schema, &col.name);
-        if let Some(col_schema) = col_schema {
-            if col_schema.is_key {
-                return col.clone();
-            }
-        };
-    }
-    todo!();
-}
-
-pub(crate) fn get_primary_key<'a>(schema: &'a TableSchema) -> &'a ColumnSchema {
-    for col in &schema.columns {
-        if col.is_key {
+        if col.name == col_name {
             return col;
         }
     }
     todo!();
 }
 
-pub(crate) fn get_col_schema<'a>(
-    schema: &'a TableSchema,
-    col_name: &String,
-) -> Option<&'a ColumnSchema> {
-    for col in &schema.columns {
-        if col.name == *col_name {
-            return Some(col);
-        }
-    }
-    None
-}
-
 pub(crate) fn get_hashed_key_from_row(row: &RowProto, schema: &TableSchema) -> u32 {
-    for col in &row.columns {
-        let col_schema = get_col_schema(schema, &col.name);
-        if let Some(col_schema) = col_schema {
-            if col_schema.is_key {
-                return get_hashed_col_value(col);
-            }
-        };
-    }
-    todo!();
+    let key_column = get_col(row, &schema.key.name);
+    get_hashed_col_value(key_column)
 }
 
 pub(crate) fn get_hashed_col_value(col_val: &ColumnProto) -> u32 {
@@ -95,7 +65,7 @@ pub(crate) fn internal_row_to_row(
     let columns = internal_row
         .col_values
         .iter()
-        .zip(schema.columns.iter())
+        .zip(iter::once(schema.key.as_ref().unwrap()).chain(schema.columns.iter()))
         .map(|(internal_column, column_schema)| internal_col_to_col(internal_column, column_schema))
         .collect();
 
@@ -109,31 +79,29 @@ pub(crate) fn create_table_schema_for_index(
     index_schema: &IndexSchema,
     table_schema: &TableSchema,
 ) -> TableSchema {
-    let mut index_key = index_schema.column.clone();
+    let mut table_key = table_schema.key.clone().unwrap();
 
-    let mut table_key = ColumnSchema::new();
-    table_key.name = "PrimaryKeyHash".to_string();
-    table_key.type_ = column_schema::Type::UNSIGNED_INTEGER.into();
+    let mut index_table_schema = TableSchema::new();
+    index_table_schema.key = index_schema.key.clone();
+    index_table_schema.columns.push(table_key);
 
-    let mut table_schema = TableSchema::new();
-    table_schema.columns.push(index_key.unwrap());
-    table_schema.columns.push(table_key);
-
-    table_schema
+    index_table_schema
 }
 
 pub(crate) fn table_row_to_index_row(
     row: &RowProto,
     index_schema: &TableSchema,
-    primary_key_hash: u32,
+    table_schema: &TableSchema,
 ) -> RowProto {
-    let index_key = get_index_key_value(index_schema, row);
-    let mut table_key_hash = ColumnProto::new();
-    table_key_hash.name = "PrimaryKeyHash".to_string();
-    table_key_hash.set_uint_value(primary_key_hash);
+    let index_key = get_col(row, &index_schema.key.name);
+    let mut table_key = get_col(row, &table_schema.key.as_ref().unwrap().name);
 
     let mut index_row = RowProto::new();
-    index_row.columns = vec![index_key, table_key_hash];
+    index_row.columns = vec![index_key.clone(), table_key.clone()];
 
     index_row
+}
+
+pub(crate) fn is_schema_keyed_on_column(schema: &TableSchema, col: &ColumnProto) -> bool {
+    schema.key.name == col.name
 }

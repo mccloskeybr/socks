@@ -17,10 +17,9 @@ fn setup() -> TestContext {
         file: std::io::Cursor::<Vec<u8>>::new(Vec::new()),
         schema: parse_from_str::<TableSchema>(
             "
-            columns {
+            key {
                 name: \"Key\"
-                type: INTEGER
-                is_key: true
+                column_type: INTEGER
             }
             ",
         )
@@ -189,11 +188,14 @@ fn insert_many_ok() -> Result<(), Error> {
 #[test]
 fn read_row_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = create(context.file, context.config, context.schema)?;
+    let mut table = create(context.file, context.config, context.schema.clone())?;
     let row = parse_from_str::<InternalRowProto>("col_values { int_value: 1 }")?;
     insert(&mut table, 1, row.clone())?;
-    let read_result: InternalRowProto = read_row(&mut table, 1)?;
-    assert_eq!(read_result, row);
+    let read_result: RowProto = read_row(&mut table, 1)?;
+    assert_eq!(
+        read_result,
+        schema::internal_row_to_row(&row, &context.schema)
+    );
     Ok(())
 }
 
@@ -215,10 +217,11 @@ fn read_row_many_ok() -> Result<(), Error> {
     for i in 0..num_iter {
         let read_result = read_row(&mut table, i as u32)?;
 
-        let mut expected_col_val = InternalColumnProto::new();
+        let mut expected_col_val = ColumnProto::new();
+        expected_col_val.name = "Key".to_string();
         expected_col_val.set_int_value(i);
-        let mut expected_read_result = InternalRowProto::new();
-        expected_read_result.col_values.push(expected_col_val);
+        let mut expected_read_result = RowProto::new();
+        expected_read_result.columns.push(expected_col_val);
 
         assert_eq!(read_result, expected_read_result);
     }

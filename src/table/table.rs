@@ -7,6 +7,7 @@ use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
+use crate::schema;
 use crate::table::bp_tree;
 use crate::table::cache::Cache;
 use crate::table::chunk;
@@ -74,6 +75,13 @@ pub(crate) fn commit_metadata<F: Filelike>(table: &mut Table<F>) -> Result<(), E
     Ok(())
 }
 
+pub(crate) fn is_table_keyed_on_column<F: Filelike>(
+    table: &Table<F>,
+    column: &ColumnProto,
+) -> bool {
+    schema::is_schema_keyed_on_column(&table.metadata.schema, column)
+}
+
 pub(crate) fn insert<F: Filelike>(
     table: &mut Table<F>,
     key: u32,
@@ -83,10 +91,11 @@ pub(crate) fn insert<F: Filelike>(
     bp_tree::insert(table, key, row)
 }
 
-pub(crate) fn read_row<F: Filelike>(
-    table: &mut Table<F>,
-    key: u32,
-) -> Result<InternalRowProto, Error> {
+pub(crate) fn read_row<F: Filelike>(table: &mut Table<F>, key: u32) -> Result<RowProto, Error> {
     log::trace!("Retrieving row with key: {key}");
-    bp_tree::read_row(table, table.metadata.root_chunk_offset, key)
+    let internal_row = bp_tree::read_row(table, table.metadata.root_chunk_offset, key)?;
+    Ok(schema::internal_row_to_row(
+        &internal_row,
+        &table.metadata.schema,
+    ))
 }

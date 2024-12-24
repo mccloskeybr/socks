@@ -2,21 +2,21 @@ syntax = "proto3";
 
 message ColumnSchema {
   string name = 1;
-  enum Type {
+  enum ColumnType {
     UNDEFINED = 0;
     INTEGER = 1;
     UNSIGNED_INTEGER = 2;
   }
-  Type type = 2;
-  bool is_key = 3;
+  ColumnType column_type = 2;
 }
 
 message TableSchema {
+  /* required */ ColumnSchema key = 1;
   repeated ColumnSchema columns = 2;
 }
 
 message IndexSchema {
-  /* required */ ColumnSchema column = 1;
+  /* required */ ColumnSchema key = 1;
 }
 
 message DatabaseSchema {

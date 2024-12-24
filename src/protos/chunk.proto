@@ -1,11 +1,13 @@
 syntax = "proto3";
 
 import "config.proto";
+import "operations.proto";
 
 message ChunkProto {
   oneof chunk_type {
     TableMetadataProto metadata = 1;
     NodeProto node = 2;
+    InternalQueryResultsProto query_results = 3;
   }
 }
 
@@ -36,6 +38,11 @@ message InternalNodeProto {
 message LeafNodeProto {
   repeated uint32 keys = 1;
   repeated InternalRowProto rows = 2;
+}
+
+message InternalQueryResultsProto {
+  repeated uint32 keys = 1;
+  repeated RowProto rows = 2;
 }
 
 message InternalRowProto {

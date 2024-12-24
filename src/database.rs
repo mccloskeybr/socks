@@ -19,6 +19,25 @@ pub struct Database<F: Filelike> {
     pub(crate) secondary_indexes: Vec<Rc<RefCell<Table<F>>>>,
 }
 
+pub(crate) fn find_table_keyed_on_column<F: Filelike>(
+    db: &Database<F>,
+    column: &ColumnProto,
+) -> Result<Rc<RefCell<Table<F>>>, Error> {
+    if table::is_table_keyed_on_column(&db.table.borrow(), column) {
+        log::trace!("1");
+        return Ok(db.table.clone());
+    }
+    for secondary_index in &db.secondary_indexes {
+        if table::is_table_keyed_on_column(&secondary_index.borrow(), &column) {
+            return Ok(secondary_index.clone());
+        }
+    }
+    return Err(Error::NotFound(format!(
+        "Column not indexed: {}!",
+        column.name
+    )));
+}
+
 // TODO: validate dir doesn't exist, config, schema.
 // probably want to move validations to the db level instead of the index level.
 pub fn create<F: Filelike>(
@@ -35,7 +54,7 @@ pub fn create<F: Filelike>(
     let mut secondary_indexes = Vec::<Rc<RefCell<Table<F>>>>::new();
     for secondary_index_schema in schema.secondary_indexes {
         secondary_indexes.push(Rc::new(RefCell::new(table::create(
-            F::create(format!("{}/{}", dir, &secondary_index_schema.column.name).as_str())?,
+            F::create(format!("{}/{}", dir, &secondary_index_schema.key.name).as_str())?,
             config.clone(),
             schema::create_table_schema_for_index(
                 &secondary_index_schema,
@@ -61,7 +80,7 @@ pub fn insert<F: Filelike>(db: &mut Database<F>, op: InsertProto) -> Result<(), 
         let index_row = schema::table_row_to_index_row(
             &op.row,
             &secondary_index.borrow().metadata.schema.as_ref().unwrap(),
-            table_key,
+            &db.table.borrow().metadata.schema.as_ref().unwrap(),
         );
         let index_key =
             schema::get_hashed_key_from_row(&index_row, &secondary_index.borrow().metadata.schema);
@@ -79,13 +98,9 @@ pub fn insert<F: Filelike>(db: &mut Database<F>, op: InsertProto) -> Result<(), 
 
 pub fn read_row<F: Filelike>(db: &mut Database<F>, op: ReadRowProto) -> Result<RowProto, Error> {
     let hashed_key = schema::get_hashed_col_value(&op.key_value);
-    let internal_row = table::read_row(&mut db.table.borrow_mut(), hashed_key)?;
-    Ok(schema::internal_row_to_row(
-        &internal_row,
-        &db.table.borrow().metadata.schema,
-    ))
+    table::read_row(&mut db.table.borrow_mut(), hashed_key)
 }
 
-pub fn query<F: Filelike>(db: &mut Database<F>, op: QueryProto) -> Result<(), Error> {
-    query::execute_query(db, op)
+pub fn query<F: Filelike>(db: &mut Database<F>, op: QueryProto) -> Result<F, Error> {
+    query::execute_query::<F>(db, op)
 }

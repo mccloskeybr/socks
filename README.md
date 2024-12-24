@@ -114,3 +114,4 @@ the first 2 bytes of each chunk store the size of the wrapped proto.
 - https://dataintensive.net/
 - https://www.geeksforgeeks.org/introduction-of-b-tree/
 - http://www.cs.columbia.edu/~kar/pubsk/simd.pdf
+- http://www.vldb.org/pvldb/vol8/p293-inoue.pdf
