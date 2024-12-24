@@ -4,18 +4,21 @@ import "config.proto";
 import "operations.proto";
 
 message TableMetadataProto {
-  TableConfig config = 1;
-  TableSchema schema = 2;
-  uint32 root_chunk_offset = 3;
-  uint32 next_chunk_offset = 4;
+  string name = 1;
+  TableConfig config = 2;
+  TableSchema schema = 3;
+  uint32 root_chunk_offset = 4;
+  uint32 next_chunk_offset = 5;
 }
 
 message NodeProto {
   uint32 offset = 1;
   uint32 parent_offset = 2;
+  uint32 left_sibling_offset = 3;
+  uint32 right_sibling_offset = 4;
   oneof node_type {
-    InternalNodeProto internal = 3;
-    LeafNodeProto leaf = 4;
+    InternalNodeProto internal = 5;
+    LeafNodeProto leaf = 6;
   }
 }
 
@@ -38,12 +41,5 @@ message InternalQueryResultsProto {
 }
 
 message InternalRowProto {
-  repeated InternalColumnProto col_values = 1;
-}
-
-message InternalColumnProto {
-  oneof column_type {
-    int32 int_value = 1;
-    uint32 uint_value = 2;
-  }
+  repeated ValueProto col_values = 1;
 }

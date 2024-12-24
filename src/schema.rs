@@ -1,6 +1,7 @@
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
+use protobuf::MessageField;
 use std::iter;
 
 pub(crate) fn get_col<'a>(row: &'a RowProto, col_name: &str) -> &'a ColumnProto {
@@ -14,38 +15,21 @@ pub(crate) fn get_col<'a>(row: &'a RowProto, col_name: &str) -> &'a ColumnProto 
 
 pub(crate) fn get_hashed_key_from_row(row: &RowProto, schema: &TableSchema) -> u32 {
     let key_column = get_col(row, &schema.key.name);
-    get_hashed_col_value(key_column)
+    get_hashed_col_value(key_column.value.as_ref().unwrap())
 }
 
-pub(crate) fn get_hashed_col_value(col_val: &ColumnProto) -> u32 {
-    match col_val.value {
-        Some(column_proto::Value::IntValue(i)) => i as u32,
-        Some(column_proto::Value::UintValue(u)) => u,
+pub(crate) fn get_hashed_col_value(value: &ValueProto) -> u32 {
+    match value.value_type {
+        Some(value_proto::Value_type::IntValue(i)) => i as u32,
+        Some(value_proto::Value_type::UintValue(u)) => u,
         None => unreachable!(),
     }
 }
 
-pub(crate) fn col_to_internal_col(col: &ColumnProto) -> InternalColumnProto {
-    let mut internal_col = InternalColumnProto::new();
-    match col.value {
-        Some(column_proto::Value::IntValue(i)) => internal_col.set_int_value(i),
-        Some(column_proto::Value::UintValue(u)) => internal_col.set_uint_value(u),
-        None => unreachable!(),
-    };
-    internal_col
-}
-
-pub(crate) fn internal_col_to_col(
-    internal_column: &InternalColumnProto,
-    column_schema: &ColumnSchema,
-) -> ColumnProto {
+pub(crate) fn internal_col_to_col(value: &ValueProto, column_schema: &ColumnSchema) -> ColumnProto {
     let mut column = ColumnProto::new();
     column.name = column_schema.name.clone();
-    match internal_column.column_type {
-        None => {}
-        Some(internal_column_proto::Column_type::IntValue(i)) => column.set_int_value(i),
-        Some(internal_column_proto::Column_type::UintValue(u)) => column.set_uint_value(u),
-    }
+    column.value = MessageField::some(value.clone());
     column
 }
 
@@ -53,7 +37,7 @@ pub(crate) fn internal_col_to_col(
 pub(crate) fn row_to_internal_row(row: &RowProto, schema: &TableSchema) -> InternalRowProto {
     let mut internal_row = InternalRowProto::new();
     for col in &row.columns {
-        internal_row.col_values.push(col_to_internal_col(col));
+        internal_row.col_values.push(col.value.clone().unwrap());
     }
     internal_row
 }
@@ -102,6 +86,6 @@ pub(crate) fn table_row_to_index_row(
     index_row
 }
 
-pub(crate) fn is_schema_keyed_on_column(schema: &TableSchema, col: &ColumnProto) -> bool {
-    schema.key.name == col.name
+pub(crate) fn is_schema_keyed_on_column(schema: &TableSchema, col_name: &str) -> bool {
+    schema.key.name == col_name
 }

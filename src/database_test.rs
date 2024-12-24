@@ -1,9 +1,10 @@
 use crate::chunk;
-use crate::database::*;
+use crate::database;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
+use crate::schema;
 use crate::table;
 use crate::table::Table;
 use protobuf::text_format::parse_from_str;
@@ -56,23 +57,27 @@ fn setup() -> TestContext {
 #[test]
 fn insert_single_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
+    let mut db = database::create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
         row {
             columns {
                 name: \"Key\"
-                int_value: 1
+                value {
+                    int_value: 1
+                }
             }
             columns {
                 name: \"Value\"
-                int_value: 2
+                value {
+                    int_value: 2
+                }
             }
         }
         ",
     )?;
-    insert(&mut db, insert_operation.clone())?;
+    database::insert(&mut db, insert_operation.clone())?;
 
     // row in primary index
     {
@@ -99,33 +104,39 @@ fn insert_single_success() -> Result<(), Error> {
 #[test]
 fn read_single_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
+    let mut db = database::create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
         row {
             columns {
                 name: \"Key\"
-                int_value: 1
+                value {
+                    int_value: 1
+                }
             }
             columns {
                 name: \"Value\"
-                int_value: 2
+                value {
+                    int_value: 2
+                }
             }
         }
         ",
     )?;
-    insert(&mut db, insert_operation.clone())?;
+    database::insert(&mut db, insert_operation.clone())?;
 
     let read_operation = parse_from_str::<ReadRowProto>(
         "
-        key_value {
+        column {
             name: \"Key\"
-            int_value: 1
+            value {
+                int_value: 1
+            }
         }
         ",
     )?;
-    let row = read_row(&mut db, read_operation);
+    let row = database::read_row(&mut db, read_operation);
 
     assert_eq!(insert_operation.row.unwrap(), row.unwrap());
 
@@ -135,15 +146,15 @@ fn read_single_success() -> Result<(), Error> {
 #[test]
 fn query_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
+    let mut db = database::create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
 
     for i in 0..50 {
         let mut key = ColumnProto::new();
         key.name = "Key".to_string();
-        key.set_int_value(i);
+        key.value.mut_or_insert_default().set_int_value(i);
         let mut val = ColumnProto::new();
         val.name = "Value".to_string();
-        val.set_int_value(i * 10);
+        val.value.mut_or_insert_default().set_int_value(i * 10);
 
         let mut row = RowProto::new();
         row.columns.push(key);
@@ -151,24 +162,26 @@ fn query_success() -> Result<(), Error> {
 
         let mut insert_operation = InsertProto::new();
         insert_operation.row = MessageField::some(row);
-        insert(&mut db, insert_operation)?;
+        database::insert(&mut db, insert_operation)?;
     }
 
     let query_operation = parse_from_str::<QueryProto>(
         "
-        lookup {
+        select {
             dep {
                 filter {
-                    column_equals {
+                    equals {
                         name: \"Value\"
-                        int_value: 250
+                        value {
+                            int_value: 250
+                        }
                     }
                 }
             }
         }
         ",
     )?;
-    let mut query_results_file = query(&mut db, query_operation)?;
+    let mut query_results_file = database::query(&mut db, query_operation)?;
     let mut query_results: InternalQueryResultsProto = chunk::read_chunk_at(
         &db.table.borrow().metadata.config.clone().unwrap(),
         &mut query_results_file,
@@ -181,11 +194,15 @@ fn query_success() -> Result<(), Error> {
         rows {
             columns {
                 name: \"Key\"
-                int_value: 25
+                value {
+                    int_value: 25
+                }
             }
             columns {
                 name: \"Value\"
-                int_value: 250
+                value {
+                    int_value: 250
+                }
             }
         }
         ",

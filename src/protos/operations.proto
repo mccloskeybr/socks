@@ -1,11 +1,15 @@
 syntax = "proto3";
 
+message ValueProto {
+  oneof value_type {
+    int32 int_value = 1;
+    uint32 uint_value = 2;
+  }
+}
+
 message ColumnProto {
   string name = 1;
-  oneof value {
-    int32 int_value = 2;
-    uint32 uint_value = 3;
-  }
+  ValueProto value = 2;
 }
 
 message RowProto {
@@ -17,14 +21,14 @@ message InsertProto {
 }
 
 message ReadRowProto {
-  ColumnProto key_value = 2;
+  ColumnProto column = 2;
 }
 
 message QueryProto {
   oneof stage_type {
     IntersectProto intersect = 1;
     FilterProto filter = 2;
-    LookupProto lookup = 3;
+    SelectProto select = 3;
   }
 }
 
@@ -33,12 +37,25 @@ message IntersectProto {
   QueryProto rhs = 2;
 }
 
+
 message FilterProto {
+  message FilterEqualsProto {
+    string name = 1;
+    ValueProto value = 2;
+  }
+  message FilterInRangeProto {
+    string name = 1;
+    // NOTE: inclusive.
+    ValueProto lower_value = 2;
+    ValueProto upper_value = 3;
+  }
+
   oneof filter_type {
-    ColumnProto column_equals = 1;
+    FilterEqualsProto equals = 1;
+    FilterInRangeProto in_range = 2;
   }
 }
 
-message LookupProto {
+message SelectProto {
   QueryProto dep = 1;
 }

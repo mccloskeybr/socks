@@ -82,8 +82,11 @@ fn split_child_leaf<F: Filelike>(
     let mut right_child = NodeProto::new();
     right_child.offset = next_chunk_offset(table);
     right_child.parent_offset = parent.offset;
+    right_child.left_sibling_offset = left_child.offset;
     right_child.mut_leaf().keys = left_child.mut_leaf().keys.split_off(split_idx);
     right_child.mut_leaf().rows = left_child.mut_leaf().rows.split_off(split_idx);
+
+    left_child.right_sibling_offset = right_child.offset;
 
     parent
         .mut_internal()
@@ -116,9 +119,12 @@ fn split_child_internal<F: Filelike>(
     let mut right_child = NodeProto::new();
     right_child.offset = next_chunk_offset(table);
     right_child.parent_offset = parent.offset;
+    right_child.left_sibling_offset = left_child.offset;
     right_child.mut_internal().keys = left_child.mut_internal().keys.split_off(split_idx);
     right_child.mut_internal().child_offsets =
         left_child.mut_internal().child_offsets.split_off(split_idx);
+
+    left_child.right_sibling_offset = right_child.offset;
 
     parent.mut_internal().keys.insert(
         child_chunk_idx,

@@ -28,10 +28,12 @@ pub(crate) struct Table<F: Filelike> {
 
 pub(crate) fn create<F: Filelike>(
     mut file: F,
+    name: String,
     config: TableConfig,
     schema: TableSchema,
 ) -> Result<Table<F>, Error> {
     let mut metadata = TableMetadataProto::new();
+    metadata.name = name;
     metadata.config = MessageField::some(config.clone());
     metadata.schema = MessageField::some(schema);
     metadata.root_chunk_offset = 1;
@@ -70,11 +72,8 @@ pub(crate) fn commit_metadata<F: Filelike>(table: &mut Table<F>) -> Result<(), E
     Ok(())
 }
 
-pub(crate) fn is_table_keyed_on_column<F: Filelike>(
-    table: &Table<F>,
-    column: &ColumnProto,
-) -> bool {
-    schema::is_schema_keyed_on_column(&table.metadata.schema, column)
+pub(crate) fn is_table_keyed_on_column<F: Filelike>(table: &Table<F>, col_name: &str) -> bool {
+    schema::is_schema_keyed_on_column(&table.metadata.schema, col_name)
 }
 
 pub(crate) fn insert<F: Filelike>(

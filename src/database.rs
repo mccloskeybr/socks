@@ -22,20 +22,20 @@ pub struct Database<F: Filelike> {
 
 pub(crate) fn find_table_keyed_on_column<F: Filelike>(
     db: &Database<F>,
-    column: &ColumnProto,
+    col_name: &str,
 ) -> Result<Rc<RefCell<Table<F>>>, Error> {
-    if table::is_table_keyed_on_column(&db.table.borrow(), column) {
+    if table::is_table_keyed_on_column(&db.table.borrow(), col_name) {
         log::trace!("1");
         return Ok(db.table.clone());
     }
     for secondary_index in &db.secondary_indexes {
-        if table::is_table_keyed_on_column(&secondary_index.borrow(), &column) {
+        if table::is_table_keyed_on_column(&secondary_index.borrow(), &col_name) {
             return Ok(secondary_index.clone());
         }
     }
     return Err(Error::NotFound(format!(
         "Column not indexed: {}!",
-        column.name
+        col_name
     )));
 }
 
@@ -48,6 +48,7 @@ pub fn create<F: Filelike>(
 ) -> Result<Database<F>, Error> {
     let table = table::create(
         F::create(format!("{}/{}", dir, "table").as_str())?,
+        format!("Table{}", schema.table.key.name),
         config.clone(),
         schema.table.clone().unwrap(),
     )?;
@@ -56,6 +57,10 @@ pub fn create<F: Filelike>(
     for secondary_index_schema in schema.secondary_indexes {
         secondary_indexes.push(Rc::new(RefCell::new(table::create(
             F::create(format!("{}/{}", dir, &secondary_index_schema.key.name).as_str())?,
+            format!(
+                "Table{}Index{}",
+                schema.table.key.name, secondary_index_schema.key.name
+            ),
             config.clone(),
             schema::create_table_schema_for_index(
                 &secondary_index_schema,
@@ -99,7 +104,7 @@ pub fn insert<F: Filelike>(db: &mut Database<F>, op: InsertProto) -> Result<(), 
 }
 
 pub fn read_row<F: Filelike>(db: &mut Database<F>, op: ReadRowProto) -> Result<RowProto, Error> {
-    let hashed_key = schema::get_hashed_col_value(&op.key_value);
+    let hashed_key = schema::get_hashed_col_value(&op.column.value);
     table::read_row(&mut db.table.borrow_mut(), hashed_key)
 }
 
