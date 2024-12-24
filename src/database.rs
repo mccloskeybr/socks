@@ -15,6 +15,7 @@ use std::fs::{File, OpenOptions};
 use std::rc::Rc;
 
 pub struct Database<F: Filelike> {
+    pub(crate) config: TableConfig,
     pub(crate) table: Rc<RefCell<Table<F>>>,
     pub(crate) secondary_indexes: Vec<Rc<RefCell<Table<F>>>>,
 }
@@ -64,6 +65,7 @@ pub fn create<F: Filelike>(
     }
 
     Ok(Database {
+        config: config,
         table: Rc::new(RefCell::new(table)),
         secondary_indexes: secondary_indexes,
     })

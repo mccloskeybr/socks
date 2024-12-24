@@ -9,45 +9,120 @@ use crate::schema;
 use crate::table::chunk;
 use crate::table::table;
 use crate::table::table::Table;
-use crate::LANE_WIDTH;
+use protobuf::Message;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::rc::Rc;
-use std::simd::cmp::SimdPartialEq;
-use std::simd::Simd;
 
 // NOTE: any saved files are expected to be sorted by primary key.
 
 // TODO: SIMD iteration
-struct QueryResultsIterator<F: Filelike> {
+struct ResultsReader<F: Filelike> {
     file: F,
     config: TableConfig,
     current_chunk: InternalQueryResultsProto,
-    chunk_offset: u32,
+    current_chunk_offset: u32,
     idx: usize,
 }
 
-impl<F: Filelike> QueryResultsIterator<F> {
+impl<F: Filelike> ResultsReader<F> {
     fn new(mut file: F, config: TableConfig) -> Result<Self, Error> {
-        let mut chunk = chunk::read_chunk_at(&config, &mut file, 0)?;
         Ok(Self {
             file: file,
             config: config,
-            current_chunk: chunk.take_query_results(),
-            chunk_offset: 0,
+            current_chunk: InternalQueryResultsProto::new(),
+            current_chunk_offset: std::u32::MAX,
             idx: std::usize::MAX,
         })
     }
 
-    fn next(&mut self) -> Result<u32, Error> {
-        self.idx.wrapping_add(1);
-        if self.idx > self.current_chunk.keys.len() {
+    fn next_key(&mut self) -> Result<u32, Error> {
+        self.idx = self.idx.wrapping_add(1);
+        if self.idx >= self.current_chunk.keys.len() {
             self.idx = 0;
-            self.chunk_offset += 1;
-            let mut chunk = chunk::read_chunk_at(&self.config, &mut self.file, self.chunk_offset)?;
+            self.current_chunk_offset = self.current_chunk_offset.wrapping_add(1);
+            dbg!("{}", self.current_chunk_offset);
+            let mut chunk =
+                chunk::read_chunk_at(&self.config, &mut self.file, self.current_chunk_offset)?;
             self.current_chunk = chunk.take_query_results();
+            // NOTE: it seems like cursors don't OOB when reading outside written bounds?
+            if self.current_chunk.keys.len() == 0 {
+                return Err(Error::OutOfBounds("".to_string()));
+            }
         }
         Ok(self.current_chunk.keys[self.idx])
+    }
+}
+
+struct ResultsWriter<F: Filelike> {
+    file: F,
+    config: TableConfig,
+    current_chunk: ChunkProto,
+    current_chunk_offset: u32,
+}
+
+impl<F: Filelike> ResultsWriter<F> {
+    fn new(mut file: F, config: TableConfig) -> Result<Self, Error> {
+        Ok(Self {
+            file: file,
+            config: config,
+            current_chunk: ChunkProto::new(),
+            current_chunk_offset: 0,
+        })
+    }
+
+    fn write_key(&mut self, key: u32) -> Result<(), Error> {
+        if chunk::would_chunk_overflow(
+            &self.config,
+            self.current_chunk.compute_size() as usize + std::mem::size_of::<u32>(),
+        ) {
+            chunk::write_chunk_at::<F>(
+                &self.config,
+                &mut self.file,
+                self.current_chunk.clone(),
+                self.current_chunk_offset,
+            )?;
+            self.current_chunk_offset += 1;
+            self.current_chunk = ChunkProto::new();
+        }
+        self.current_chunk.mut_query_results().keys.push(key);
+        Ok(())
+    }
+
+    fn write_key_row(&mut self, key: u32, row: RowProto) -> Result<(), Error> {
+        if chunk::would_chunk_overflow(
+            &self.config,
+            self.current_chunk.compute_size() as usize
+                + row.compute_size() as usize
+                + std::mem::size_of::<u32>(),
+        ) {
+            chunk::write_chunk_at::<F>(
+                &self.config,
+                &mut self.file,
+                self.current_chunk.clone(),
+                self.current_chunk_offset,
+            )?;
+            self.current_chunk_offset += 1;
+            self.current_chunk = ChunkProto::new();
+        }
+        self.current_chunk.mut_query_results().keys.push(key);
+        self.current_chunk.mut_query_results().rows.push(row);
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<(), Error> {
+        dbg!(
+            "flushing: {} at {}",
+            &self.current_chunk,
+            self.current_chunk_offset
+        );
+        chunk::write_chunk_at::<F>(
+            &self.config,
+            &mut self.file,
+            self.current_chunk.clone(),
+            self.current_chunk_offset,
+        )?;
+        Ok(())
     }
 }
 
@@ -55,54 +130,54 @@ fn execute_intersect<F: Filelike>(
     db: &mut Database<F>,
     intersect: IntersectProto,
 ) -> Result<F, Error> {
-    let config: TableConfig = db.table.borrow().metadata.config.clone().unwrap();
+    let mut out = ResultsWriter::new(F::create("TODO")?, db.config.clone())?;
 
-    let mut output = F::create("TODO")?;
-    let mut chunk = ChunkProto::new();
-    let results = &mut chunk.mut_query_results();
-
-    let mut lhs_results: F = execute_query(db, intersect.lhs.unwrap())?;
-    let mut rhs_results: F = execute_query(db, intersect.rhs.unwrap())?;
-    let mut lhs_it = QueryResultsIterator::new(lhs_results, config.clone())?;
-    let mut rhs_it = QueryResultsIterator::new(rhs_results, config.clone())?;
-    let mut lhs = lhs_it.next()?;
-    let mut rhs = rhs_it.next()?;
+    let mut lhs_it = ResultsReader::new(
+        execute_query(db, intersect.lhs.unwrap())?,
+        db.config.clone(),
+    )?;
+    let mut rhs_it = ResultsReader::new(
+        execute_query(db, intersect.rhs.unwrap())?,
+        db.config.clone(),
+    )?;
+    let mut lhs = lhs_it.next_key()?;
+    let mut rhs = rhs_it.next_key()?;
     loop {
         let ord = lhs.cmp(&rhs);
         match ord {
             Ordering::Less => {
-                let Ok(next_lhs) = lhs_it.next() else {
+                let Ok(next_lhs) = lhs_it.next_key() else {
                     break;
                 };
                 lhs = next_lhs;
             }
             Ordering::Greater => {
-                let Ok(next_rhs) = rhs_it.next() else {
+                let Ok(next_rhs) = rhs_it.next_key() else {
                     break;
                 };
                 rhs = next_rhs;
             }
             Ordering::Equal => {
-                results.keys.push(lhs);
+                out.write_key(lhs)?;
 
-                let Ok(next_lhs) = lhs_it.next() else {
+                let Ok(next_lhs) = lhs_it.next_key() else {
                     break;
                 };
                 lhs = next_lhs;
-                let Ok(next_rhs) = rhs_it.next() else {
+                let Ok(next_rhs) = rhs_it.next_key() else {
                     break;
                 };
                 rhs = next_rhs;
             }
         }
     }
+    out.flush()?;
 
-    chunk::write_chunk_at(&config, &mut output, chunk, 0)?;
-    Ok(output)
+    Ok(out.file)
 }
 
 fn execute_filter<F: Filelike>(db: &mut Database<F>, filter: FilterProto) -> Result<F, Error> {
-    let mut output = F::create("TODO")?;
+    let mut out = ResultsWriter::new(F::create("TODO")?, db.config.clone())?;
     match filter.filter_type {
         Some(filter_proto::Filter_type::ColumnEquals(column)) => {
             let table: Rc<RefCell<Table<F>>> = database::find_table_keyed_on_column(db, &column)?;
@@ -117,48 +192,24 @@ fn execute_filter<F: Filelike>(db: &mut Database<F>, filter: FilterProto) -> Res
             let pk = schema::get_col(&row, &db.table.borrow().metadata.schema.key.name);
             let pk_hash = schema::get_hashed_col_value(&pk);
 
-            let mut chunk = ChunkProto::new();
-            let results = &mut chunk.mut_query_results();
-            results.keys.push(pk_hash);
-
-            // TODO: centralize data config instead of accessing like this.
-            chunk::write_chunk_at(
-                db.table.borrow().metadata.config.as_ref().unwrap(),
-                &mut output,
-                chunk,
-                0,
-            )?;
+            out.write_key(pk_hash)?;
         }
         None => panic!(),
     }
-    Ok(output)
+    out.flush()?;
+    Ok(out.file)
 }
 
 fn execute_lookup<F: Filelike>(db: &mut Database<F>, lookup: LookupProto) -> Result<F, Error> {
-    let config: TableConfig = db.table.borrow().metadata.config.clone().unwrap();
-
-    let mut dep = execute_query(db, lookup.dep.unwrap())?;
-    let mut dep_results = chunk::read_chunk_at(&config, &mut dep, 0)?;
-    let mut dep_results = dep_results.take_query_results();
-
-    let mut output = F::create("TODO")?;
-    let mut out_chunk = ChunkProto::new();
-    let out_results = &mut out_chunk.mut_query_results();
-
+    let mut out = ResultsWriter::new(F::create("TODO")?, db.config.clone())?;
+    let mut dep = ResultsReader::new(execute_query(db, lookup.dep.unwrap())?, db.config.clone())?;
     let table: Rc<RefCell<Table<F>>> = db.table.clone();
-    for key in dep_results.keys {
+    while let Ok(key) = dep.next_key() {
         let row = table::read_row(&mut table.borrow_mut(), key)?;
-        out_results.keys.push(key);
-        out_results.rows.push(row);
+        out.write_key_row(key, row)?;
     }
-
-    chunk::write_chunk_at(
-        db.table.borrow().metadata.config.as_ref().unwrap(),
-        &mut output,
-        out_chunk,
-        0,
-    )?;
-    Ok(output)
+    out.flush()?;
+    Ok(out.file)
 }
 
 pub fn execute_query<F: Filelike>(db: &mut Database<F>, query: QueryProto) -> Result<F, Error> {
