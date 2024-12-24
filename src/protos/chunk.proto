@@ -3,14 +3,6 @@ syntax = "proto3";
 import "config.proto";
 import "operations.proto";
 
-message ChunkProto {
-  oneof chunk_type {
-    TableMetadataProto metadata = 1;
-    NodeProto node = 2;
-    InternalQueryResultsProto query_results = 3;
-  }
-}
-
 message TableMetadataProto {
   TableConfig config = 1;
   TableSchema schema = 2;

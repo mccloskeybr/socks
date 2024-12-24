@@ -1,9 +1,9 @@
+use crate::cache;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
-use crate::table::cache;
-use crate::table::table::*;
+use crate::table::*;
 
 mod insert_aggressive_split;
 mod read_binary_search;
@@ -46,10 +46,7 @@ pub fn read_row<F: Filelike>(
     curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
-    let curr_chunk: ChunkProto = cache::read(table, curr_offset)?;
-    debug_assert!(curr_chunk.has_node());
-    let node: &NodeProto = curr_chunk.node();
-
+    let node: NodeProto = cache::read(table, curr_offset)?;
     match &node.node_type {
         Some(node_proto::Node_type::Internal(internal)) => {
             let idx = find_next_node_idx_for_key(

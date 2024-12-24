@@ -12,7 +12,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 // Byte format of each chunk is the following:
 // 1. data size: u16 / 4 bytes.
-// 2. data: [u8] ChunkProto to end of section.
+// 2. data: [u8] proto message to end of section.
 // Each section is guaranteed to be of a configurable static size.
 
 fn read_data_update_cursor<'a>(
@@ -29,14 +29,14 @@ fn read_data_update_cursor<'a>(
     Ok(slice)
 }
 
-fn chunk_from_bytes(bytes: &[u8]) -> Result<ChunkProto, Error> {
+fn chunk_from_bytes<M: Message>(bytes: &[u8]) -> Result<M, Error> {
     let mut cursor: usize = 0;
 
     let slice = read_data_update_cursor(bytes, std::mem::size_of::<u16>(), &mut cursor)?;
     let chunk_size = u16::from_be_bytes(slice.try_into()?);
 
     let slice = read_data_update_cursor(bytes, chunk_size as usize, &mut cursor)?;
-    let chunk = ChunkProto::parse_from_bytes(&slice)?;
+    let chunk = M::parse_from_bytes(&slice)?;
 
     Ok(chunk)
 }
@@ -62,8 +62,8 @@ fn write_data_update_cursor(
     Ok(())
 }
 
-fn chunk_to_bytes(config: &TableConfig, chunk: &ChunkProto) -> Result<Vec<u8>, Error> {
-    let data: Vec<u8> = chunk.write_to_bytes()?;
+fn chunk_to_bytes<M: Message>(config: &TableConfig, msg: &M) -> Result<Vec<u8>, Error> {
+    let data: Vec<u8> = msg.write_to_bytes()?;
     let data_len: u16 = data.len().try_into().unwrap();
 
     let mut bytes = Vec::with_capacity(config.chunk_size as usize);
@@ -75,11 +75,11 @@ fn chunk_to_bytes(config: &TableConfig, chunk: &ChunkProto) -> Result<Vec<u8>, E
     Ok(bytes)
 }
 
-pub(crate) fn read_chunk_at<F: Filelike>(
+pub(crate) fn read_chunk_at<F: Filelike, M: Message>(
     config: &TableConfig,
     reader: &mut F,
     chunk_offset: u32,
-) -> Result<ChunkProto, Error> {
+) -> Result<M, Error> {
     let mut bytes: Vec<u8> = Vec::with_capacity(config.chunk_size as usize);
     bytes.resize_with(config.chunk_size as usize, || 0);
     reader.seek(SeekFrom::Start(
@@ -87,16 +87,16 @@ pub(crate) fn read_chunk_at<F: Filelike>(
     ))?;
     reader.read(&mut bytes)?;
     stats::increment_chunk_read();
-    chunk_from_bytes(&bytes)
+    chunk_from_bytes::<M>(&bytes)
 }
 
-pub(crate) fn write_chunk_at<F: Filelike>(
+pub(crate) fn write_chunk_at<F: Filelike, M: Message>(
     config: &TableConfig,
     writer: &mut F,
-    chunk: ChunkProto,
+    msg: M,
     chunk_offset: u32,
 ) -> Result<(), Error> {
-    let bytes: Vec<u8> = chunk_to_bytes(config, &chunk)?;
+    let bytes: Vec<u8> = chunk_to_bytes::<M>(config, &msg)?;
     writer.seek(SeekFrom::Start(
         chunk_offset as u64 * config.chunk_size as u64,
     ))?;

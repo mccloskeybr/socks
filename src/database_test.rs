@@ -1,11 +1,11 @@
+use crate::chunk;
 use crate::database::*;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
-use crate::table::chunk;
-use crate::table::table;
-use crate::table::table::Table;
+use crate::table;
+use crate::table::Table;
 use protobuf::text_format::parse_from_str;
 use protobuf::MessageField;
 use std::cell::RefCell;
@@ -169,12 +169,11 @@ fn query_success() -> Result<(), Error> {
         ",
     )?;
     let mut query_results_file = query(&mut db, query_operation)?;
-    let mut query_results = chunk::read_chunk_at(
+    let mut query_results: InternalQueryResultsProto = chunk::read_chunk_at(
         &db.table.borrow().metadata.config.clone().unwrap(),
         &mut query_results_file,
         0,
     )?;
-    let query_results = query_results.take_query_results();
 
     let expected_query_results = parse_from_str::<InternalQueryResultsProto>(
         "

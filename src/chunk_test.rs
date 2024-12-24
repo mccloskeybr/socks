@@ -1,6 +1,6 @@
+use crate::chunk::*;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
-use crate::table::chunk::*;
 use protobuf::text_format::parse_from_str;
 
 struct TestContext {
@@ -25,15 +25,15 @@ fn setup() -> TestContext {
 fn read_write_single_chunk() -> Result<(), Error> {
     let mut context = setup();
 
-    let mut chunk_in = ChunkProto::new();
-    chunk_in.mut_metadata().next_chunk_offset = 1;
+    let mut chunk_in = TableMetadataProto::new();
+    chunk_in.next_chunk_offset = 1;
     write_chunk_at(&context.config, &mut context.file, chunk_in.clone(), 0)?;
     assert_eq!(
         context.file.get_ref().len(),
         context.config.chunk_size as usize
     );
 
-    let chunk_out = read_chunk_at(&context.config, &mut context.file, 0)?;
+    let chunk_out: TableMetadataProto = read_chunk_at(&context.config, &mut context.file, 0)?;
     assert_eq!(chunk_out, chunk_in);
 
     Ok(())
@@ -43,10 +43,10 @@ fn read_write_single_chunk() -> Result<(), Error> {
 fn read_write_many_chunks() -> Result<(), Error> {
     let mut context = setup();
     let n = 5;
-    let mut chunks: Vec<ChunkProto> = Vec::new();
+    let mut chunks: Vec<TableMetadataProto> = Vec::new();
     for i in 0..n {
-        let mut chunk = ChunkProto::new();
-        chunk.mut_metadata().next_chunk_offset = i;
+        let mut chunk = TableMetadataProto::new();
+        chunk.next_chunk_offset = i;
         chunks.push(chunk);
     }
 
@@ -64,7 +64,7 @@ fn read_write_many_chunks() -> Result<(), Error> {
     );
 
     for i in 0..n {
-        let chunk = read_chunk_at(&context.config, &mut context.file, i)?;
+        let chunk: TableMetadataProto = read_chunk_at(&context.config, &mut context.file, i)?;
         assert_eq!(chunk, chunks[i as usize]);
     }
 
@@ -75,23 +75,23 @@ fn read_write_many_chunks() -> Result<(), Error> {
 fn overwrite_chunk() -> Result<(), Error> {
     let mut context = setup();
 
-    let mut chunk_1 = ChunkProto::new();
-    chunk_1.mut_metadata().next_chunk_offset = 1;
+    let mut chunk_1 = TableMetadataProto::new();
+    chunk_1.next_chunk_offset = 1;
     write_chunk_at(&context.config, &mut context.file, chunk_1.clone(), 0)?;
     assert_eq!(
         context.file.get_ref().len(),
         context.config.chunk_size as usize
     );
 
-    let mut chunk_2 = ChunkProto::new();
-    chunk_2.mut_metadata().next_chunk_offset = 2;
+    let mut chunk_2 = TableMetadataProto::new();
+    chunk_2.next_chunk_offset = 2;
     write_chunk_at(&context.config, &mut context.file, chunk_2.clone(), 0)?;
     assert_eq!(
         context.file.get_ref().len(),
         context.config.chunk_size as usize
     );
 
-    let chunk = read_chunk_at(&context.config, &mut context.file, 0)?;
+    let chunk: TableMetadataProto = read_chunk_at(&context.config, &mut context.file, 0)?;
     assert_eq!(chunk, chunk_2);
 
     Ok(())
@@ -101,12 +101,11 @@ fn overwrite_chunk() -> Result<(), Error> {
 fn huge_chunk_fails_write() -> Result<(), Error> {
     let mut context = setup();
 
-    let mut chunk = ChunkProto::new();
-    let node = chunk.mut_node();
+    let mut chunk = NodeProto::new();
     for i in 0..context.config.chunk_size as usize {
-        node.mut_internal().keys.push(std::u32::MAX);
+        chunk.mut_internal().keys.push(std::u32::MAX);
     }
-    assert!(node.compute_size() > context.config.chunk_size as usize as u64);
+    assert!(chunk.compute_size() > context.config.chunk_size as usize as u64);
     match write_chunk_at(&context.config, &mut context.file, chunk.clone(), 0) {
         Err(Error::OutOfBounds(..)) => return Ok(()),
         _ => panic!(),

@@ -15,6 +15,9 @@ static CACHE_SIZE: usize = 10;
 static BINARY_READ_ITER_CUTOFF: usize = 10;
 
 extern crate self as socks;
+mod bp_tree;
+mod cache;
+mod chunk;
 pub mod database;
 mod error;
 mod filelike;

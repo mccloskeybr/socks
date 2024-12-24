@@ -1,7 +1,7 @@
+use crate::chunk;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
-use crate::table::chunk;
-use crate::table::table::*;
+use crate::table::*;
 use protobuf::text_format::parse_from_str;
 use std::io::Cursor;
 
@@ -52,20 +52,18 @@ fn validate_node_sorted(node: &NodeProto) {
 fn create_ok() -> Result<(), Error> {
     let mut context = setup();
     let mut table = create(context.file, context.config, context.schema)?;
+
     assert_eq!(
         table.file.get_ref().len(),
         (table.metadata.config.chunk_size * 2) as usize
     );
-    let chunk_0 = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 0)?;
-    let chunk_1 = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
 
-    assert!(chunk_0.has_metadata());
-    let metadata = chunk_0.metadata();
+    let metadata: TableMetadataProto =
+        chunk::read_chunk_at(&table.metadata.config, &mut table.file, 0)?;
     assert_eq!(metadata.root_chunk_offset, 1);
     assert_eq!(metadata.next_chunk_offset, 2);
 
-    assert!(chunk_1.has_node());
-    let node = chunk_1.node();
+    let node: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
     assert_eq!(node.offset, 1);
 
     Ok(())
@@ -87,18 +85,14 @@ fn insert_single_ok() -> Result<(), Error> {
         (table.metadata.config.chunk_size * 3) as usize
     );
 
-    let root_chunk = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
-    assert!(root_chunk.has_node());
-    let root = root_chunk.node();
+    let root: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
     assert_eq!(root.offset, 1);
     assert!(root.has_internal());
     assert_eq!(root.internal().keys.len(), 0);
     assert_eq!(root.internal().child_offsets.len(), 1);
     assert_eq!(root.internal().child_offsets[0], 2);
 
-    let data_chunk = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 2)?;
-    assert!(data_chunk.has_node());
-    let data = data_chunk.node();
+    let data: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 2)?;
     assert!(data.has_leaf());
     assert_eq!(data.offset, 2);
     assert_eq!(row, data.leaf().rows[0]);
@@ -133,16 +127,12 @@ fn insert_sorted() -> Result<(), Error> {
         table.file.get_ref().len(),
         (table.metadata.config.chunk_size * 3) as usize
     );
-    let root_chunk = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
-    assert!(root_chunk.has_node());
-    let root = root_chunk.node();
+    let root: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
     assert_eq!(root.offset, 1);
     assert!(root.has_internal());
     assert_eq!(root.internal().child_offsets.len(), 1);
 
-    let data_chunk = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 2)?;
-    assert!(data_chunk.has_node());
-    let data = data_chunk.node();
+    let data: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 2)?;
     assert_eq!(data.offset, 2);
     assert!(data.has_leaf());
     assert_eq!(data.leaf().rows.len(), 3);
@@ -168,8 +158,8 @@ fn insert_many_ok() -> Result<(), Error> {
         insert(&mut table, i as u32, row)?;
     }
 
-    let metadata = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 0)?;
-    let metadata = metadata.metadata();
+    let metadata: TableMetadataProto =
+        chunk::read_chunk_at(&table.metadata.config, &mut table.file, 0)?;
     assert_eq!(metadata.next_chunk_offset, 3);
     assert_eq!(metadata.root_chunk_offset, 1);
 
@@ -178,8 +168,8 @@ fn insert_many_ok() -> Result<(), Error> {
         (table.metadata.config.chunk_size * 3) as usize
     );
     for i in 1..3 {
-        let node_chunk = chunk::read_chunk_at(&table.metadata.config, &mut table.file, i)?;
-        validate_node_sorted(node_chunk.node());
+        let node: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, i)?;
+        validate_node_sorted(&node);
     }
 
     Ok(())

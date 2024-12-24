@@ -2,15 +2,15 @@
 #[path = "./table_test.rs"]
 mod test;
 
+use crate::bp_tree;
+use crate::cache::Cache;
+use crate::chunk;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::schema;
-use crate::table::bp_tree;
-use crate::table::cache::Cache;
-use crate::table::chunk;
 use protobuf::Message;
 use protobuf::MessageField;
 use std::io::{Read, Seek, Write};
@@ -37,16 +37,13 @@ pub(crate) fn create<F: Filelike>(
     metadata.root_chunk_offset = 1;
     metadata.next_chunk_offset = 2;
     {
-        let mut metadata_chunk = ChunkProto::new();
-        metadata_chunk.set_metadata(metadata.clone());
-        chunk::write_chunk_at::<F>(&config, &mut file, metadata_chunk, 0)?;
+        chunk::write_chunk_at::<F, TableMetadataProto>(&config, &mut file, metadata.clone(), 0)?;
     }
     {
-        let mut root_node_chunk = ChunkProto::new();
-        let root_node: &mut NodeProto = root_node_chunk.mut_node();
+        let mut root_node = NodeProto::new();
         root_node.offset = 1;
         root_node.set_internal(InternalNodeProto::new());
-        chunk::write_chunk_at::<F>(&config, &mut file, root_node_chunk, 1)?;
+        chunk::write_chunk_at::<F, NodeProto>(&config, &mut file, root_node, 1)?;
     }
 
     Ok(Table {
@@ -64,12 +61,10 @@ pub(crate) fn next_chunk_offset<F: Filelike>(table: &mut Table<F>) -> u32 {
 
 pub(crate) fn commit_metadata<F: Filelike>(table: &mut Table<F>) -> Result<(), Error> {
     log::trace!("Committing metadata.");
-    let mut metadata_chunk = ChunkProto::new();
-    metadata_chunk.set_metadata(table.metadata.clone());
-    chunk::write_chunk_at::<F>(
+    chunk::write_chunk_at::<F, TableMetadataProto>(
         &table.metadata.config,
         &mut table.file,
-        metadata_chunk.clone(),
+        table.metadata.clone(),
         0,
     )?;
     Ok(())
