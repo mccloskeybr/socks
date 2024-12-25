@@ -14,7 +14,6 @@ use std::io::Cursor;
 use std::rc::Rc;
 
 struct TestContext {
-    config: TableConfig,
     schema: DatabaseSchema,
 }
 
@@ -42,20 +41,13 @@ fn setup() -> TestContext {
             ",
         )
         .unwrap(),
-        config: parse_from_str::<TableConfig>(
-            "
-            chunk_size: 512
-            chunk_overflow_size: 10
-            ",
-        )
-        .unwrap(),
     }
 }
 
 #[test]
 fn insert_single_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = database::create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
+    let mut db = database::create::<Cursor<Vec<u8>>>("", context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -102,7 +94,7 @@ fn insert_single_success() -> Result<(), Error> {
 #[test]
 fn read_single_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = database::create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
+    let mut db = database::create::<Cursor<Vec<u8>>>("", context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -144,7 +136,7 @@ fn read_single_success() -> Result<(), Error> {
 #[test]
 fn query_success() -> Result<(), Error> {
     let mut context = setup();
-    let mut db = database::create::<Cursor<Vec<u8>>>("", context.config, context.schema)?;
+    let mut db = database::create::<Cursor<Vec<u8>>>("", context.schema)?;
 
     for i in 0..50 {
         let mut key = ColumnProto::new();
@@ -180,11 +172,8 @@ fn query_success() -> Result<(), Error> {
         ",
     )?;
     let mut query_results_file = database::query(&mut db, query_operation)?;
-    let mut query_results: InternalQueryResultsProto = chunk::read_chunk_at(
-        &db.table.borrow().metadata.config.clone().unwrap(),
-        &mut query_results_file,
-        0,
-    )?;
+    let mut query_results: InternalQueryResultsProto =
+        chunk::read_chunk_at(&mut query_results_file, 0)?;
 
     let expected_query_results = parse_from_str::<InternalQueryResultsProto>(
         "

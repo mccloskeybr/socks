@@ -3,7 +3,6 @@ use crate::database::*;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::table::Table;
 use protobuf::Message;
@@ -12,16 +11,14 @@ use std::rc::Rc;
 
 pub(crate) struct ResultsWriter<F: Filelike> {
     pub(crate) file: F,
-    config: TableConfig,
     current_chunk: InternalQueryResultsProto,
     current_chunk_offset: u32,
 }
 
 impl<F: Filelike> ResultsWriter<F> {
-    pub(crate) fn new(mut file: F, config: TableConfig) -> Self {
+    pub(crate) fn new(mut file: F) -> Self {
         Self {
             file: file,
-            config: config,
             current_chunk: InternalQueryResultsProto::new(),
             current_chunk_offset: 0,
         }
@@ -29,11 +26,9 @@ impl<F: Filelike> ResultsWriter<F> {
 
     pub(crate) fn write_key(&mut self, key: u32) -> Result<(), Error> {
         if chunk::would_chunk_overflow(
-            &self.config,
             self.current_chunk.compute_size() as usize + std::mem::size_of::<u32>(),
         ) {
             chunk::write_chunk_at::<F, InternalQueryResultsProto>(
-                &self.config,
                 &mut self.file,
                 self.current_chunk.clone(),
                 self.current_chunk_offset,
@@ -47,13 +42,11 @@ impl<F: Filelike> ResultsWriter<F> {
 
     pub(crate) fn write_key_row(&mut self, key: u32, row: RowProto) -> Result<(), Error> {
         if chunk::would_chunk_overflow(
-            &self.config,
             self.current_chunk.compute_size() as usize
                 + row.compute_size() as usize
                 + std::mem::size_of::<u32>(),
         ) {
             chunk::write_chunk_at::<F, InternalQueryResultsProto>(
-                &self.config,
                 &mut self.file,
                 self.current_chunk.clone(),
                 self.current_chunk_offset,
@@ -68,7 +61,6 @@ impl<F: Filelike> ResultsWriter<F> {
 
     pub(crate) fn flush(&mut self) -> Result<(), Error> {
         chunk::write_chunk_at::<F, InternalQueryResultsProto>(
-            &self.config,
             &mut self.file,
             self.current_chunk.clone(),
             self.current_chunk_offset,

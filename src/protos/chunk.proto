@@ -5,10 +5,9 @@ import "operations.proto";
 
 message TableMetadataProto {
   string name = 1;
-  TableConfig config = 2;
-  TableSchema schema = 3;
-  uint32 root_chunk_offset = 4;
-  uint32 next_chunk_offset = 5;
+  TableSchema schema = 2;
+  uint32 root_chunk_offset = 3;
+  uint32 next_chunk_offset = 4;
 }
 
 message NodeProto {

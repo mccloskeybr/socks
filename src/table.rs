@@ -29,23 +29,21 @@ pub(crate) struct Table<F: Filelike> {
 pub(crate) fn create<F: Filelike>(
     mut file: F,
     name: String,
-    config: TableConfig,
     schema: TableSchema,
 ) -> Result<Table<F>, Error> {
     let mut metadata = TableMetadataProto::new();
     metadata.name = name;
-    metadata.config = MessageField::some(config.clone());
     metadata.schema = MessageField::some(schema);
     metadata.root_chunk_offset = 1;
     metadata.next_chunk_offset = 2;
     {
-        chunk::write_chunk_at::<F, TableMetadataProto>(&config, &mut file, metadata.clone(), 0)?;
+        chunk::write_chunk_at::<F, TableMetadataProto>(&mut file, metadata.clone(), 0)?;
     }
     {
         let mut root_node = NodeProto::new();
         root_node.offset = 1;
         root_node.set_internal(InternalNodeProto::new());
-        chunk::write_chunk_at::<F, NodeProto>(&config, &mut file, root_node, 1)?;
+        chunk::write_chunk_at::<F, NodeProto>(&mut file, root_node, 1)?;
     }
 
     Ok(Table {
@@ -63,12 +61,7 @@ pub(crate) fn next_chunk_offset<F: Filelike>(table: &mut Table<F>) -> u32 {
 
 pub(crate) fn commit_metadata<F: Filelike>(table: &mut Table<F>) -> Result<(), Error> {
     log::trace!("Committing metadata.");
-    chunk::write_chunk_at::<F, TableMetadataProto>(
-        &table.metadata.config,
-        &mut table.file,
-        table.metadata.clone(),
-        0,
-    )?;
+    chunk::write_chunk_at::<F, TableMetadataProto>(&mut table.file, table.metadata.clone(), 0)?;
     Ok(())
 }
 

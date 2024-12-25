@@ -15,7 +15,6 @@ use std::fs::{File, OpenOptions};
 use std::rc::Rc;
 
 pub struct Database<F: Filelike> {
-    pub(crate) config: TableConfig,
     pub(crate) table: Rc<RefCell<Table<F>>>,
     pub(crate) secondary_indexes: Vec<Rc<RefCell<Table<F>>>>,
 }
@@ -39,17 +38,12 @@ pub(crate) fn find_table_keyed_on_column<F: Filelike>(
     )));
 }
 
-// TODO: validate dir doesn't exist, config, schema.
+// TODO: validate dir doesn't exist, schema.
 // probably want to move validations to the db level instead of the index level.
-pub fn create<F: Filelike>(
-    dir: &str,
-    config: TableConfig,
-    schema: DatabaseSchema,
-) -> Result<Database<F>, Error> {
+pub fn create<F: Filelike>(dir: &str, schema: DatabaseSchema) -> Result<Database<F>, Error> {
     let table = table::create(
         F::create(format!("{}/{}", dir, "table").as_str())?,
         format!("Table{}", schema.table.key.name),
-        config.clone(),
         schema.table.clone().unwrap(),
     )?;
 
@@ -61,7 +55,6 @@ pub fn create<F: Filelike>(
                 "Table{}Index{}",
                 schema.table.key.name, secondary_index_schema.key.name
             ),
-            config.clone(),
             schema::create_table_schema_for_index(
                 &secondary_index_schema,
                 &schema.table.as_ref().unwrap(),
@@ -70,7 +63,6 @@ pub fn create<F: Filelike>(
     }
 
     Ok(Database {
-        config: config,
         table: Rc::new(RefCell::new(table)),
         secondary_indexes: secondary_indexes,
     })

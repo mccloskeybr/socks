@@ -3,7 +3,6 @@ use crate::database::*;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::table::Table;
 use std::cell::RefCell;
@@ -11,17 +10,15 @@ use std::rc::Rc;
 
 pub(crate) struct ResultsReader<F: Filelike> {
     file: F,
-    config: TableConfig,
     current_chunk: InternalQueryResultsProto,
     current_chunk_offset: u32,
     idx: usize,
 }
 
 impl<F: Filelike> ResultsReader<F> {
-    pub(crate) fn new(mut file: F, config: TableConfig) -> Self {
+    pub(crate) fn new(mut file: F) -> Self {
         Self {
             file: file,
-            config: config,
             current_chunk: InternalQueryResultsProto::new(),
             current_chunk_offset: std::u32::MAX,
             idx: std::usize::MAX,
@@ -37,7 +34,6 @@ impl<F: Filelike> ResultsReader<F> {
             self.current_chunk_offset = self.current_chunk_offset.wrapping_add(1);
             dbg!("{}", self.current_chunk_offset);
             self.current_chunk = chunk::read_chunk_at::<F, InternalQueryResultsProto>(
-                &self.config,
                 &mut self.file,
                 self.current_chunk_offset,
             )?;

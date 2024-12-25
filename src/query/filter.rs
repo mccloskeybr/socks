@@ -3,7 +3,6 @@ use crate::database::Database;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::query::{reader::ResultsReader, writer::ResultsWriter};
 use crate::schema;
@@ -29,7 +28,7 @@ fn execute_filter_equals<F: Filelike>(
     let pk = schema::get_col(&row, &db.table.borrow().metadata.schema.key.name);
     let pk_hash = schema::get_hashed_col_value(&pk.value);
 
-    let mut out = ResultsWriter::new(F::create("TODO")?, db.config.clone());
+    let mut out = ResultsWriter::new(F::create("TODO")?);
     out.write_key(pk_hash)?;
     out.flush()?;
     Ok(out.file)

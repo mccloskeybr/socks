@@ -6,13 +6,13 @@ use crate::protos::generated::operations::*;
 use crate::schema;
 use crate::table;
 use crate::table::Table;
+use crate::CHUNK_SIZE;
 use protobuf::text_format::parse_from_str;
 use std::io::Cursor;
 
 struct TestContext {
     file: Cursor<Vec<u8>>,
     schema: TableSchema,
-    config: TableConfig,
 }
 
 fn setup() -> TestContext {
@@ -25,13 +25,6 @@ fn setup() -> TestContext {
                 name: \"Key\"
                 column_type: INTEGER
             }
-            ",
-        )
-        .unwrap(),
-        config: parse_from_str::<TableConfig>(
-            "
-            chunk_size: 512
-            chunk_overflow_size: 10
             ",
         )
         .unwrap(),
@@ -53,24 +46,15 @@ fn validate_node_sorted(node: &NodeProto) {
 #[test]
 fn create_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(
-        context.file,
-        "TestTable".to_string(),
-        context.config,
-        context.schema,
-    )?;
+    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
 
-    assert_eq!(
-        table.file.get_ref().len(),
-        (table.metadata.config.chunk_size * 2) as usize
-    );
+    assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 2) as usize);
 
-    let metadata: TableMetadataProto =
-        chunk::read_chunk_at(&table.metadata.config, &mut table.file, 0)?;
+    let metadata: TableMetadataProto = chunk::read_chunk_at(&mut table.file, 0)?;
     assert_eq!(metadata.root_chunk_offset, 1);
     assert_eq!(metadata.next_chunk_offset, 2);
 
-    let node: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
+    let node: NodeProto = chunk::read_chunk_at(&mut table.file, 1)?;
     assert_eq!(node.offset, 1);
 
     Ok(())
@@ -79,12 +63,7 @@ fn create_ok() -> Result<(), Error> {
 #[test]
 fn insert_single_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(
-        context.file,
-        "TestTable".to_string(),
-        context.config,
-        context.schema,
-    )?;
+    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
 
     let mut col = ValueProto::new();
     col.set_int_value(1);
@@ -92,19 +71,16 @@ fn insert_single_ok() -> Result<(), Error> {
     row.col_values.push(col);
     table::insert(&mut table, 1, row.clone())?;
 
-    assert_eq!(
-        table.file.get_ref().len(),
-        (table.metadata.config.chunk_size * 3) as usize
-    );
+    assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 3) as usize);
 
-    let root: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
+    let root: NodeProto = chunk::read_chunk_at(&mut table.file, 1)?;
     assert_eq!(root.offset, 1);
     assert!(root.has_internal());
     assert_eq!(root.internal().keys.len(), 0);
     assert_eq!(root.internal().child_offsets.len(), 1);
     assert_eq!(root.internal().child_offsets[0], 2);
 
-    let data: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 2)?;
+    let data: NodeProto = chunk::read_chunk_at(&mut table.file, 2)?;
     assert!(data.has_leaf());
     assert_eq!(data.offset, 2);
     assert_eq!(row, data.leaf().rows[0]);
@@ -115,12 +91,7 @@ fn insert_single_ok() -> Result<(), Error> {
 #[test]
 fn insert_sorted() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(
-        context.file,
-        "TestTable".to_string(),
-        context.config,
-        context.schema,
-    )?;
+    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
 
     let mut col_1 = ValueProto::new();
     col_1.set_int_value(1);
@@ -140,16 +111,13 @@ fn insert_sorted() -> Result<(), Error> {
     row_3.col_values.push(col_3);
     table::insert(&mut table, 3, row_3.clone())?;
 
-    assert_eq!(
-        table.file.get_ref().len(),
-        (table.metadata.config.chunk_size * 3) as usize
-    );
-    let root: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 1)?;
+    assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 3) as usize);
+    let root: NodeProto = chunk::read_chunk_at(&mut table.file, 1)?;
     assert_eq!(root.offset, 1);
     assert!(root.has_internal());
     assert_eq!(root.internal().child_offsets.len(), 1);
 
-    let data: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, 2)?;
+    let data: NodeProto = chunk::read_chunk_at(&mut table.file, 2)?;
     assert_eq!(data.offset, 2);
     assert!(data.has_leaf());
     assert_eq!(data.leaf().rows.len(), 3);
@@ -164,12 +132,7 @@ fn insert_sorted() -> Result<(), Error> {
 #[test]
 fn insert_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(
-        context.file,
-        "TestTable".to_string(),
-        context.config,
-        context.schema,
-    )?;
+    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
 
     for i in 0..60 {
         let mut col = ValueProto::new();
@@ -180,17 +143,13 @@ fn insert_many_ok() -> Result<(), Error> {
         table::insert(&mut table, i as u32, row)?;
     }
 
-    let metadata: TableMetadataProto =
-        chunk::read_chunk_at(&table.metadata.config, &mut table.file, 0)?;
+    let metadata: TableMetadataProto = chunk::read_chunk_at(&mut table.file, 0)?;
     assert_eq!(metadata.next_chunk_offset, 3);
     assert_eq!(metadata.root_chunk_offset, 1);
 
-    assert_eq!(
-        table.file.get_ref().len(),
-        (table.metadata.config.chunk_size * 3) as usize
-    );
+    assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 3) as usize);
     for i in 1..3 {
-        let node: NodeProto = chunk::read_chunk_at(&table.metadata.config, &mut table.file, i)?;
+        let node: NodeProto = chunk::read_chunk_at(&mut table.file, i)?;
         validate_node_sorted(&node);
     }
 
@@ -203,7 +162,6 @@ fn read_row_ok() -> Result<(), Error> {
     let mut table = table::create(
         context.file,
         "TestTable".to_string(),
-        context.config,
         context.schema.clone(),
     )?;
     let row = parse_from_str::<InternalRowProto>("col_values { int_value: 1 }")?;
@@ -219,12 +177,7 @@ fn read_row_ok() -> Result<(), Error> {
 #[test]
 fn read_row_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(
-        context.file,
-        "TestTable".to_string(),
-        context.config,
-        context.schema,
-    )?;
+    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
     let num_iter = 100;
 
     for i in 0..num_iter {

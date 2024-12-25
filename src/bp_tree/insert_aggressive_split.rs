@@ -41,7 +41,6 @@ fn insert_non_full_internal<F: Filelike>(
     match &child_node.node_type {
         Some(node_proto::Node_type::Internal(_)) => {
             if chunk::would_chunk_overflow(
-                &table.metadata.config,
                 child_node.compute_size() as usize + std::mem::size_of::<i32>(),
             ) {
                 let right_child = split_child_internal(table, node, &mut child_node, idx)?;
@@ -53,7 +52,6 @@ fn insert_non_full_internal<F: Filelike>(
         }
         Some(node_proto::Node_type::Leaf(_)) => {
             if chunk::would_chunk_overflow(
-                &table.metadata.config,
                 child_node.compute_size() as usize + row.compute_size() as usize,
             ) {
                 let right_child = split_child_leaf(table, node, &mut child_node, idx)?;
@@ -173,10 +171,7 @@ pub fn insert<F: Filelike>(
         return Ok(());
     }
 
-    if chunk::would_chunk_overflow(
-        &table.metadata.config,
-        root_node.compute_size() as usize + std::mem::size_of::<i32>(),
-    ) {
+    if chunk::would_chunk_overflow(root_node.compute_size() as usize + std::mem::size_of::<i32>()) {
         log::trace!("Root overflow detected.");
 
         // TODO: this is inefficient.

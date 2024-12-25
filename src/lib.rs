@@ -14,12 +14,24 @@ static CACHE_SIZE: usize = 10;
 // search. This is better for cache coherence when sufficiently low.
 static BINARY_READ_ITER_CUTOFF: usize = 10;
 
+// The size of each file chunk, in bytes. Influences various parts of the
+// database, e.g. the size of each B+ tree node, or how many query results are
+// grouped together. Each chunk stores 1 protobuf, so the value must be less
+// than the maximum protobuf size (2GiB).
+static CHUNK_SIZE: usize = 4096;
+
+// The byte size buffer before considering a chunk as full.
+// TODO: this shouldn't be required if calculating proto sizes correctly.
+static CHUNK_OVERFLOW_BUFFER: usize = 5;
+
+// Configurable read strategies for table B+ tree traversal.
 enum ReadStrategy {
     SequentialSearch,
     BinarySearch,
 }
 static READ_STRATEGY: ReadStrategy = ReadStrategy::BinarySearch;
 
+// Configurable write strategies for B+ tree insertion.
 enum WriteStrategy {
     AggressiveSplit,
 }

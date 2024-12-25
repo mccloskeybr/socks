@@ -46,8 +46,7 @@ pub fn read<F: Filelike>(table: &mut Table<F>, offset: u32) -> Result<NodeProto,
     let cache = &mut table.cache;
     let (idx, in_cache) = find_idx(cache, offset);
     if !in_cache {
-        cache.entries[idx].node =
-            chunk::read_chunk_at::<F, NodeProto>(&table.metadata.config, &mut table.file, offset)?;
+        cache.entries[idx].node = chunk::read_chunk_at::<F, NodeProto>(&mut table.file, offset)?;
     }
     cache.entries[idx].counter = next_counter(cache);
     Ok(cache.entries[idx].node.clone())
@@ -60,7 +59,6 @@ pub fn write<F: Filelike>(table: &mut Table<F>, node: &NodeProto) -> Result<(), 
     cache.entries[idx].node = node.clone();
     cache.entries[idx].counter = next_counter(cache);
     chunk::write_chunk_at::<F, NodeProto>(
-        &table.metadata.config,
         &mut table.file,
         cache.entries[idx].node.clone(),
         cache.entries[idx].node.offset,

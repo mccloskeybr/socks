@@ -5,8 +5,8 @@ mod test;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::protos::generated::config::*;
 use crate::stats;
+use crate::{CHUNK_OVERFLOW_BUFFER, CHUNK_SIZE};
 use protobuf::Message;
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -62,12 +62,12 @@ fn write_data_update_cursor(
     Ok(())
 }
 
-fn chunk_to_bytes<M: Message>(config: &TableConfig, msg: &M) -> Result<Vec<u8>, Error> {
+fn chunk_to_bytes<M: Message>(msg: &M) -> Result<Vec<u8>, Error> {
     let data: Vec<u8> = msg.write_to_bytes()?;
     let data_len: u16 = data.len().try_into().unwrap();
 
-    let mut bytes = Vec::with_capacity(config.chunk_size as usize);
-    bytes.resize_with(config.chunk_size as usize, || 0);
+    let mut bytes = Vec::with_capacity(CHUNK_SIZE as usize);
+    bytes.resize_with(CHUNK_SIZE as usize, || 0);
     let mut cursor: usize = 0;
     write_data_update_cursor(&data_len.to_be_bytes(), &mut bytes, &mut cursor)?;
     write_data_update_cursor(&data, &mut bytes, &mut cursor)?;
@@ -76,37 +76,31 @@ fn chunk_to_bytes<M: Message>(config: &TableConfig, msg: &M) -> Result<Vec<u8>, 
 }
 
 pub(crate) fn read_chunk_at<F: Filelike, M: Message>(
-    config: &TableConfig,
     reader: &mut F,
     chunk_offset: u32,
 ) -> Result<M, Error> {
-    let mut bytes: Vec<u8> = Vec::with_capacity(config.chunk_size as usize);
-    bytes.resize_with(config.chunk_size as usize, || 0);
-    reader.seek(SeekFrom::Start(
-        chunk_offset as u64 * config.chunk_size as u64,
-    ))?;
+    let mut bytes: Vec<u8> = Vec::with_capacity(CHUNK_SIZE as usize);
+    bytes.resize_with(CHUNK_SIZE as usize, || 0);
+    reader.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
     reader.read(&mut bytes)?;
     stats::increment_chunk_read();
     chunk_from_bytes::<M>(&bytes)
 }
 
 pub(crate) fn write_chunk_at<F: Filelike, M: Message>(
-    config: &TableConfig,
     writer: &mut F,
     msg: M,
     chunk_offset: u32,
 ) -> Result<(), Error> {
-    let bytes: Vec<u8> = chunk_to_bytes::<M>(config, &msg)?;
-    writer.seek(SeekFrom::Start(
-        chunk_offset as u64 * config.chunk_size as u64,
-    ))?;
+    let bytes: Vec<u8> = chunk_to_bytes::<M>(&msg)?;
+    writer.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
     writer.write(&bytes)?;
     writer.flush()?;
     stats::increment_chunk_write();
     Ok(())
 }
 
-pub(crate) fn would_chunk_overflow(config: &TableConfig, size: usize) -> bool {
-    let size_estimate = std::mem::size_of::<u16>() + size + config.chunk_overflow_size as usize;
-    config.chunk_size <= size_estimate.try_into().unwrap()
+pub(crate) fn would_chunk_overflow(size: usize) -> bool {
+    let size_estimate = std::mem::size_of::<u16>() + size + CHUNK_OVERFLOW_BUFFER as usize;
+    CHUNK_SIZE <= size_estimate.try_into().unwrap()
 }
