@@ -1,10 +1,8 @@
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::LANE_WIDTH;
-use std::cmp::Ordering;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
-use std::simd::{LaneCount, Simd, SupportedLaneCount};
+use std::simd::cmp::SimdPartialOrd;
+use std::simd::Simd;
 
 pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Result<usize, Error> {
     let mut idx = 0;

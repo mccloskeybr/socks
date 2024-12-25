@@ -1,10 +1,8 @@
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::{BINARY_READ_ITER_CUTOFF, LANE_WIDTH};
-use std::cmp::Ordering;
-use std::io::{Read, Seek, SeekFrom, Write};
-use std::simd::cmp::{SimdPartialEq, SimdPartialOrd};
-use std::simd::{LaneCount, Mask, Simd, SupportedLaneCount};
+use std::simd::cmp::SimdPartialOrd;
+use std::simd::{Mask, Simd};
 
 // Creates a simd vector of indices evenly distributed in the range of low, high.
 // e.g. 0, 100 w/ lane width of 4 --> [20, 40, 60, 80].
@@ -48,7 +46,6 @@ pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Res
                 upper = idxs.to_array()[i];
                 lower = idxs.to_array()[std::cmp::max(i, 1) - 1];
             }
-            _ => unreachable!(),
         }
         debug_assert!(lower <= upper);
     }
@@ -100,7 +97,6 @@ pub fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
                 upper = idxs.to_array()[i];
                 lower = idxs.to_array()[std::cmp::max(i, 1) - 1];
             }
-            _ => unreachable!(),
         }
         debug_assert!(lower <= upper);
     }

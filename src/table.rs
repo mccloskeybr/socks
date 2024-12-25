@@ -11,9 +11,7 @@ use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::schema;
-use protobuf::Message;
 use protobuf::MessageField;
-use std::io::{Read, Seek, Write};
 
 // Table file format:
 // Chunk 0:          Metadata chunk

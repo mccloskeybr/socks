@@ -1,12 +1,9 @@
-use crate::database;
 use crate::database::Database;
 use crate::error::*;
 use crate::filelike::Filelike;
-use crate::protos::generated::chunk::*;
 use crate::protos::generated::operations::*;
-use crate::query::{reader::ResultsReader, writer::ResultsWriter};
+use crate::query::writer::ResultsWriter;
 use crate::schema;
-use crate::table;
 use crate::table::Table;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -35,8 +32,8 @@ fn execute_filter_equals<F: Filelike>(
 }
 
 fn execute_filter_in_range<F: Filelike>(
-    db: &mut Database<F>,
-    in_range: filter_proto::FilterInRangeProto,
+    _db: &mut Database<F>,
+    _in_range: filter_proto::FilterInRangeProto,
 ) -> Result<F, Error> {
     // TODO: current api returns the row only, for this we need to keep state.
     todo!()

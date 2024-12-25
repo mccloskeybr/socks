@@ -4,9 +4,7 @@ use crate::filelike::Filelike;
 use crate::protos::generated::operations::*;
 use crate::query;
 use crate::query::{reader::ResultsReader, writer::ResultsWriter};
-use std::cell::RefCell;
 use std::cmp::Ordering;
-use std::rc::Rc;
 
 pub(crate) fn execute_intersect<F: Filelike>(
     db: &mut Database<F>,

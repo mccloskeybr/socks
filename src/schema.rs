@@ -34,7 +34,7 @@ pub(crate) fn internal_col_to_col(value: &ValueProto, column_schema: &ColumnSche
 }
 
 // TODO: this doesn't do any validations currently.
-pub(crate) fn row_to_internal_row(row: &RowProto, schema: &TableSchema) -> InternalRowProto {
+pub(crate) fn row_to_internal_row(row: &RowProto) -> InternalRowProto {
     let mut internal_row = InternalRowProto::new();
     for col in &row.columns {
         internal_row.col_values.push(col.value.clone().unwrap());
@@ -63,7 +63,7 @@ pub(crate) fn create_table_schema_for_index(
     index_schema: &IndexSchema,
     table_schema: &TableSchema,
 ) -> TableSchema {
-    let mut table_key = table_schema.key.clone().unwrap();
+    let table_key = table_schema.key.clone().unwrap();
 
     let mut index_table_schema = TableSchema::new();
     index_table_schema.key = index_schema.key.clone();
@@ -78,7 +78,7 @@ pub(crate) fn table_row_to_index_row(
     table_schema: &TableSchema,
 ) -> RowProto {
     let index_key = get_col(row, &index_schema.key.name);
-    let mut table_key = get_col(row, &table_schema.key.as_ref().unwrap().name);
+    let table_key = get_col(row, &table_schema.key.as_ref().unwrap().name);
 
     let mut index_row = RowProto::new();
     index_row.columns = vec![index_key.clone(), table_key.clone()];

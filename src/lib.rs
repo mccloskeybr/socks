@@ -1,4 +1,3 @@
-#![allow(warnings)]
 #![feature(portable_simd)]
 
 // How many SIMD lanes to use.
@@ -25,6 +24,7 @@ static CHUNK_SIZE: usize = 4096;
 static CHUNK_OVERFLOW_BUFFER: usize = 5;
 
 // Configurable read strategies for table B+ tree traversal.
+#[allow(dead_code)]
 enum ReadStrategy {
     SequentialSearch,
     BinarySearch,
@@ -32,6 +32,7 @@ enum ReadStrategy {
 static READ_STRATEGY: ReadStrategy = ReadStrategy::BinarySearch;
 
 // Configurable write strategies for B+ tree insertion.
+#[allow(dead_code)]
 enum WriteStrategy {
     AggressiveSplit,
 }
@@ -48,4 +49,3 @@ mod protos;
 mod query;
 mod schema;
 mod table;
-mod validate;

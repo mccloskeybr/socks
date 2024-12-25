@@ -5,12 +5,9 @@ use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::schema;
-use crate::table::Table;
 use protobuf::text_format::parse_from_str;
 use protobuf::MessageField;
-use std::cell::RefCell;
 use std::io::Cursor;
-use std::rc::Rc;
 
 struct TestContext {
     schema: DatabaseSchema,
@@ -45,7 +42,7 @@ fn setup() -> TestContext {
 
 #[test]
 fn insert_single_success() -> Result<(), Error> {
-    let mut context = setup();
+    let context = setup();
     let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
@@ -92,7 +89,7 @@ fn insert_single_success() -> Result<(), Error> {
 
 #[test]
 fn read_single_success() -> Result<(), Error> {
-    let mut context = setup();
+    let context = setup();
     let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema)?;
 
     let insert_operation = parse_from_str::<InsertProto>(
@@ -134,7 +131,7 @@ fn read_single_success() -> Result<(), Error> {
 
 #[test]
 fn query_success() -> Result<(), Error> {
-    let mut context = setup();
+    let context = setup();
     let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema)?;
 
     for i in 0..50 {
@@ -171,7 +168,7 @@ fn query_success() -> Result<(), Error> {
         ",
     )?;
     let mut query_results_file = db.query(query_operation)?;
-    let mut query_results: InternalQueryResultsProto =
+    let query_results: InternalQueryResultsProto =
         chunk::read_chunk_at(&mut query_results_file, 0)?;
 
     let expected_query_results = parse_from_str::<InternalQueryResultsProto>(

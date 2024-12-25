@@ -2,7 +2,6 @@ use crate::chunk::*;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::CHUNK_SIZE;
-use protobuf::text_format::parse_from_str;
 
 struct TestContext {
     file: std::io::Cursor<Vec<u8>>,
@@ -79,7 +78,7 @@ fn huge_chunk_fails_write() -> Result<(), Error> {
     let mut context = setup();
 
     let mut chunk = NodeProto::new();
-    for i in 0..CHUNK_SIZE as usize {
+    for _ in 0..CHUNK_SIZE as usize {
         chunk.mut_internal().keys.push(std::u32::MAX);
     }
     assert!(chunk.compute_size() > CHUNK_SIZE as usize as u64);
@@ -91,14 +90,12 @@ fn huge_chunk_fails_write() -> Result<(), Error> {
 
 #[test]
 fn would_chunk_overflow_false() -> Result<(), Error> {
-    let mut context = setup();
     assert!(!would_chunk_overflow(0));
     Ok(())
 }
 
 #[test]
 fn would_chunk_overflow_true() -> Result<(), Error> {
-    let mut context = setup();
     assert!(would_chunk_overflow(CHUNK_SIZE));
     Ok(())
 }

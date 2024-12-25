@@ -1,11 +1,7 @@
 use crate::chunk;
-use crate::database::*;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::protos::generated::operations::*;
-use std::cell::RefCell;
-use std::rc::Rc;
 
 pub(crate) struct ResultsReader<F: Filelike> {
     file: F,
@@ -15,7 +11,7 @@ pub(crate) struct ResultsReader<F: Filelike> {
 }
 
 impl<F: Filelike> ResultsReader<F> {
-    pub(crate) fn new(mut file: F) -> Self {
+    pub(crate) fn new(file: F) -> Self {
         Self {
             file: file,
             current_chunk: InternalQueryResultsProto::new(),

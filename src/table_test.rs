@@ -47,7 +47,7 @@ fn validate_node_sorted(node: &NodeProto) {
 
 #[test]
 fn create_ok() -> Result<(), Error> {
-    let mut context = setup();
+    let context = setup();
     let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema)?;
 
     assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 2) as usize);

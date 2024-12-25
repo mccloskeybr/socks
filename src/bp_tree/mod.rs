@@ -2,7 +2,6 @@ use crate::cache::Cache;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::protos::generated::config::*;
 use crate::table::*;
 use crate::{ReadStrategy::*, WriteStrategy::*, READ_STRATEGY, WRITE_STRATEGY};
 
@@ -59,7 +58,6 @@ pub fn read_row<F: Filelike>(
         }
         None => panic!(),
     }
-    Err(Error::NotFound(format!("Row with key {} not found!", key)))
 }
 
 // inserts the row with the associated key into the table.

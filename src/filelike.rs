@@ -10,7 +10,7 @@ use std::io::{Cursor, Read, Seek, Write};
 // Cursor<T> can be used as an in-memory File, so create a trait to
 // facilitate that behavior.
 
-pub(crate) trait Filelike: Read + Write + Seek + Sized {
+pub trait Filelike: Read + Write + Seek + Sized {
     fn create(path: &str) -> Result<Self, Error>;
 }
 
@@ -29,7 +29,7 @@ impl<T: Default> Filelike for Cursor<T>
 where
     Cursor<T>: Read + Write + Seek,
 {
-    fn create(path: &str) -> Result<Self, Error> {
+    fn create(_path: &str) -> Result<Self, Error> {
         Ok(Cursor::<T>::new(T::default()))
     }
 }

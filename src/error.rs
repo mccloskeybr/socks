@@ -17,7 +17,6 @@ impl std::fmt::Display for Error {
             Error::NotFound(s) => write!(f, "{}", s),
             Error::OutOfBounds(s) => write!(f, "{}", s),
             Error::AlreadyExists(s) => write!(f, "{}", s),
-            Error::InvalidArgument(s) => write!(f, "{}", s),
             Error::Internal(s) => write!(f, "{}", s),
             Error::Other(e) => e.fmt(f),
         }

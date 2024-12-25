@@ -1,16 +1,11 @@
 use crate::bp_tree;
-use crate::cache;
 use crate::cache::Cache;
 use crate::chunk;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::protos::generated::config::*;
-use crate::protos::generated::operations::*;
 use crate::table::*;
-use crate::LANE_WIDTH;
 use protobuf::Message;
-use protobuf::MessageField;
 
 fn insert_non_full_leaf<F: Filelike>(
     table: &mut Table<F>,
@@ -78,7 +73,7 @@ fn split_child_leaf<F: Filelike>(
     log::trace!("Splitting leaf node.");
     debug_assert!(parent.has_internal());
     debug_assert!(child.has_leaf());
-    let mut split_idx = child.leaf().keys.len() / 2;
+    let split_idx = child.leaf().keys.len() / 2;
 
     let left_child = child;
     let mut right_child = NodeProto::new();
@@ -116,7 +111,7 @@ fn split_child_internal<F: Filelike>(
     log::trace!("Splitting internal node.");
     debug_assert!(parent.has_internal());
     debug_assert!(child.has_internal());
-    let mut split_idx = child.internal().keys.len() / 2;
+    let split_idx = child.internal().keys.len() / 2;
 
     let left_child = child;
     let mut right_child = NodeProto::new();

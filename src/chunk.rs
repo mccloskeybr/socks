@@ -4,10 +4,9 @@ mod test;
 
 use crate::error::*;
 use crate::filelike::Filelike;
-use crate::protos::generated::chunk::*;
 use crate::{CHUNK_OVERFLOW_BUFFER, CHUNK_SIZE};
 use protobuf::Message;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::SeekFrom;
 
 // Byte format of each chunk is the following:
 // 1. data size: u16 / 2 bytes.

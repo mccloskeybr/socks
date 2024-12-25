@@ -9,10 +9,8 @@ use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::query;
 use crate::schema;
-use crate::table;
 use crate::table::Table;
 use std::cell::RefCell;
-use std::fs::{File, OpenOptions};
 use std::rc::Rc;
 
 pub struct Database<F: Filelike> {
@@ -81,8 +79,7 @@ impl<F: Filelike> Database<F> {
     pub fn insert(&mut self, op: InsertProto) -> Result<(), Error> {
         let table_key =
             schema::get_hashed_key_from_row(&op.row, &self.table.borrow().metadata.schema);
-        let table_row_internal =
-            schema::row_to_internal_row(&op.row, &self.table.borrow().metadata.schema);
+        let table_row_internal = schema::row_to_internal_row(&op.row);
         self.table
             .borrow_mut()
             .insert(&mut self.cache, table_key, table_row_internal)?;
@@ -97,11 +94,10 @@ impl<F: Filelike> Database<F> {
                 &index_row,
                 &secondary_index.borrow().metadata.schema,
             );
-            let index_row_internal =
-                schema::row_to_internal_row(&index_row, &secondary_index.borrow().metadata.schema);
+            let index_row_internal = schema::row_to_internal_row(&index_row);
             secondary_index
                 .borrow_mut()
-                .insert(&mut self.cache, index_key, index_row_internal);
+                .insert(&mut self.cache, index_key, index_row_internal)?;
         }
 
         Ok(())
