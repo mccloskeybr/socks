@@ -28,7 +28,7 @@ impl<F: Filelike> ResultsWriter<F> {
         if chunk::would_chunk_overflow(
             self.current_chunk.compute_size() as usize + std::mem::size_of::<u32>(),
         ) {
-            chunk::write_chunk_at::<F, InternalQueryResultsProto>(
+            chunk::write_chunk_at(
                 &mut self.file,
                 self.current_chunk.clone(),
                 self.current_chunk_offset,
@@ -46,7 +46,7 @@ impl<F: Filelike> ResultsWriter<F> {
                 + row.compute_size() as usize
                 + std::mem::size_of::<u32>(),
         ) {
-            chunk::write_chunk_at::<F, InternalQueryResultsProto>(
+            chunk::write_chunk_at(
                 &mut self.file,
                 self.current_chunk.clone(),
                 self.current_chunk_offset,
@@ -60,7 +60,7 @@ impl<F: Filelike> ResultsWriter<F> {
     }
 
     pub(crate) fn flush(&mut self) -> Result<(), Error> {
-        chunk::write_chunk_at::<F, InternalQueryResultsProto>(
+        chunk::write_chunk_at(
             &mut self.file,
             self.current_chunk.clone(),
             self.current_chunk_offset,

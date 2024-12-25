@@ -85,7 +85,3 @@ pub(crate) fn table_row_to_index_row(
 
     index_row
 }
-
-pub(crate) fn is_schema_keyed_on_column(schema: &TableSchema, col_name: &str) -> bool {
-    schema.key.name == col_name
-}

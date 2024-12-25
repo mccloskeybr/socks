@@ -1,10 +1,10 @@
+use crate::cache::Cache;
 use crate::chunk;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::schema;
-use crate::table;
 use crate::table::Table;
 use crate::CHUNK_SIZE;
 use protobuf::text_format::parse_from_str;
@@ -13,6 +13,7 @@ use std::io::Cursor;
 struct TestContext {
     file: Cursor<Vec<u8>>,
     schema: TableSchema,
+    cache: Cache,
 }
 
 fn setup() -> TestContext {
@@ -28,6 +29,7 @@ fn setup() -> TestContext {
             ",
         )
         .unwrap(),
+        cache: Cache::default(),
     }
 }
 
@@ -46,7 +48,7 @@ fn validate_node_sorted(node: &NodeProto) {
 #[test]
 fn create_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
+    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema)?;
 
     assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 2) as usize);
 
@@ -63,13 +65,13 @@ fn create_ok() -> Result<(), Error> {
 #[test]
 fn insert_single_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
+    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema)?;
 
     let mut col = ValueProto::new();
     col.set_int_value(1);
     let mut row = InternalRowProto::new();
     row.col_values.push(col);
-    table::insert(&mut table, 1, row.clone())?;
+    table.insert(&mut context.cache, 1, row.clone())?;
 
     assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 3) as usize);
 
@@ -91,25 +93,25 @@ fn insert_single_ok() -> Result<(), Error> {
 #[test]
 fn insert_sorted() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
+    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema)?;
 
     let mut col_1 = ValueProto::new();
     col_1.set_int_value(1);
     let mut row_1 = InternalRowProto::new();
     row_1.col_values.push(col_1);
-    table::insert(&mut table, 1, row_1.clone())?;
+    table.insert(&mut context.cache, 1, row_1.clone())?;
 
     let mut col_2 = ValueProto::new();
     col_2.set_int_value(2);
     let mut row_2 = InternalRowProto::new();
     row_2.col_values.push(col_2);
-    table::insert(&mut table, 2, row_2.clone())?;
+    table.insert(&mut context.cache, 2, row_2.clone())?;
 
     let mut col_3 = ValueProto::new();
     col_3.set_int_value(3);
     let mut row_3 = InternalRowProto::new();
     row_3.col_values.push(col_3);
-    table::insert(&mut table, 3, row_3.clone())?;
+    table.insert(&mut context.cache, 3, row_3.clone())?;
 
     assert_eq!(table.file.get_ref().len(), (CHUNK_SIZE * 3) as usize);
     let root: NodeProto = chunk::read_chunk_at(&mut table.file, 1)?;
@@ -132,7 +134,7 @@ fn insert_sorted() -> Result<(), Error> {
 #[test]
 fn insert_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
+    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema)?;
 
     for i in 0..60 {
         let mut col = ValueProto::new();
@@ -140,7 +142,7 @@ fn insert_many_ok() -> Result<(), Error> {
         let mut row = InternalRowProto::new();
         row.col_values.push(col);
 
-        table::insert(&mut table, i as u32, row)?;
+        table.insert(&mut context.cache, i as u32, row)?;
     }
 
     let metadata: TableMetadataProto = chunk::read_chunk_at(&mut table.file, 0)?;
@@ -159,14 +161,15 @@ fn insert_many_ok() -> Result<(), Error> {
 #[test]
 fn read_row_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(
+    let mut table = Table::create(
         context.file,
         "TestTable".to_string(),
+        0,
         context.schema.clone(),
     )?;
     let row = parse_from_str::<InternalRowProto>("col_values { int_value: 1 }")?;
-    table::insert(&mut table, 1, row.clone())?;
-    let read_result: RowProto = table::read_row(&mut table, 1)?;
+    table.insert(&mut context.cache, 1, row.clone())?;
+    let read_result: RowProto = table.read_row(&mut context.cache, 1)?;
     assert_eq!(
         read_result,
         schema::internal_row_to_row(&row, &context.schema)
@@ -177,7 +180,7 @@ fn read_row_ok() -> Result<(), Error> {
 #[test]
 fn read_row_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = table::create(context.file, "TestTable".to_string(), context.schema)?;
+    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema)?;
     let num_iter = 100;
 
     for i in 0..num_iter {
@@ -186,11 +189,11 @@ fn read_row_many_ok() -> Result<(), Error> {
         let mut row = InternalRowProto::new();
         row.col_values.push(col);
 
-        table::insert(&mut table, i as u32, row)?;
+        table.insert(&mut context.cache, i as u32, row)?;
     }
 
     for i in 0..num_iter {
-        let read_result = table::read_row(&mut table, i as u32)?;
+        let read_result = table.read_row(&mut context.cache, i as u32)?;
 
         let mut expected_col_val = ColumnProto::new();
         expected_col_val.name = "Key".to_string();

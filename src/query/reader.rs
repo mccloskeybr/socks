@@ -4,7 +4,6 @@ use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::operations::*;
-use crate::table::Table;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -33,10 +32,7 @@ impl<F: Filelike> ResultsReader<F> {
             self.idx = 0;
             self.current_chunk_offset = self.current_chunk_offset.wrapping_add(1);
             dbg!("{}", self.current_chunk_offset);
-            self.current_chunk = chunk::read_chunk_at::<F, InternalQueryResultsProto>(
-                &mut self.file,
-                self.current_chunk_offset,
-            )?;
+            self.current_chunk = chunk::read_chunk_at(&mut self.file, self.current_chunk_offset)?;
             // NOTE: it seems like cursors don't OOB when reading outside written bounds?
             if self.current_chunk.keys.len() == 0 {
                 return Err(Error::OutOfBounds("".to_string()));

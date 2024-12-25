@@ -1,5 +1,6 @@
 use crate::bp_tree;
 use crate::cache;
+use crate::cache::Cache;
 use crate::chunk;
 use crate::error::*;
 use crate::filelike::Filelike;
@@ -13,6 +14,7 @@ use protobuf::MessageField;
 
 fn insert_non_full_leaf<F: Filelike>(
     table: &mut Table<F>,
+    cache: &mut Cache,
     node: &mut NodeProto,
     key: u32,
     row: InternalRowProto,
@@ -23,12 +25,13 @@ fn insert_non_full_leaf<F: Filelike>(
 
     leaf.keys.insert(idx, key);
     leaf.rows.insert(idx, row);
-    cache::write(table, &node)?;
+    cache.write(table, &node)?;
     Ok(())
 }
 
 fn insert_non_full_internal<F: Filelike>(
     table: &mut Table<F>,
+    cache: &mut Cache,
     node: &mut NodeProto,
     key: u32,
     row: InternalRowProto,
@@ -37,29 +40,29 @@ fn insert_non_full_internal<F: Filelike>(
 
     let idx = bp_tree::find_next_node_idx_for_key(node.internal(), key)?;
     debug_assert!(idx < node.internal().child_offsets.len());
-    let mut child_node = cache::read(table, node.internal().child_offsets[idx])?;
+    let mut child_node = cache.read(table, node.internal().child_offsets[idx])?;
     match &child_node.node_type {
         Some(node_proto::Node_type::Internal(_)) => {
             if chunk::would_chunk_overflow(
                 child_node.compute_size() as usize + std::mem::size_of::<i32>(),
             ) {
-                let right_child = split_child_internal(table, node, &mut child_node, idx)?;
+                let right_child = split_child_internal(table, cache, node, &mut child_node, idx)?;
                 if node.internal().keys[idx] < key {
                     child_node = right_child;
                 }
             }
-            return insert_non_full_internal(table, &mut child_node, key, row);
+            return insert_non_full_internal(table, cache, &mut child_node, key, row);
         }
         Some(node_proto::Node_type::Leaf(_)) => {
             if chunk::would_chunk_overflow(
                 child_node.compute_size() as usize + row.compute_size() as usize,
             ) {
-                let right_child = split_child_leaf(table, node, &mut child_node, idx)?;
+                let right_child = split_child_leaf(table, cache, node, &mut child_node, idx)?;
                 if node.internal().keys[idx] < key {
                     child_node = right_child;
                 }
             }
-            return insert_non_full_leaf(table, &mut child_node, key, row);
+            return insert_non_full_leaf(table, cache, &mut child_node, key, row);
         }
         None => unreachable!(),
     }
@@ -67,6 +70,7 @@ fn insert_non_full_internal<F: Filelike>(
 
 fn split_child_leaf<F: Filelike>(
     table: &mut Table<F>,
+    cache: &mut Cache,
     parent: &mut NodeProto,
     child: &mut NodeProto,
     child_chunk_idx: usize,
@@ -78,7 +82,7 @@ fn split_child_leaf<F: Filelike>(
 
     let left_child = child;
     let mut right_child = NodeProto::new();
-    right_child.offset = next_chunk_offset(table);
+    right_child.offset = table.next_chunk_offset();
     right_child.parent_offset = parent.offset;
     right_child.left_sibling_offset = left_child.offset;
     right_child.mut_leaf().keys = left_child.mut_leaf().keys.split_off(split_idx);
@@ -95,15 +99,16 @@ fn split_child_leaf<F: Filelike>(
         .child_offsets
         .insert(child_chunk_idx + 1, right_child.offset);
 
-    cache::write(table, left_child)?;
-    cache::write(table, &right_child)?;
-    cache::write(table, parent)?;
+    cache.write(table, left_child)?;
+    cache.write(table, &right_child)?;
+    cache.write(table, parent)?;
 
     Ok(right_child)
 }
 
 fn split_child_internal<F: Filelike>(
     table: &mut Table<F>,
+    cache: &mut Cache,
     parent: &mut NodeProto,
     child: &mut NodeProto,
     child_chunk_idx: usize,
@@ -115,7 +120,7 @@ fn split_child_internal<F: Filelike>(
 
     let left_child = child;
     let mut right_child = NodeProto::new();
-    right_child.offset = next_chunk_offset(table);
+    right_child.offset = table.next_chunk_offset();
     right_child.parent_offset = parent.offset;
     right_child.left_sibling_offset = left_child.offset;
     right_child.mut_internal().keys = left_child.mut_internal().keys.split_off(split_idx);
@@ -133,9 +138,9 @@ fn split_child_internal<F: Filelike>(
         .child_offsets
         .insert(child_chunk_idx + 1, right_child.offset);
 
-    cache::write(table, left_child)?;
-    cache::write(table, &right_child)?;
-    cache::write(table, parent)?;
+    cache.write(table, left_child)?;
+    cache.write(table, &right_child)?;
+    cache.write(table, parent)?;
 
     Ok(right_child)
 }
@@ -144,17 +149,18 @@ fn split_child_internal<F: Filelike>(
 // TODO: ensure key doesn't already exist
 pub fn insert<F: Filelike>(
     table: &mut Table<F>,
+    cache: &mut Cache,
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
-    let mut root_node = cache::read(table, table.metadata.root_chunk_offset)?;
+    let mut root_node = cache.read(table, table.metadata.root_chunk_offset)?;
     debug_assert!(root_node.has_internal());
 
     if root_node.internal().keys.len() + root_node.internal().child_offsets.len() == 0 {
         log::trace!("Inserting first value.");
 
         let mut child_node = NodeProto::new();
-        child_node.offset = next_chunk_offset(table);
+        child_node.offset = table.next_chunk_offset();
         child_node.parent_offset = root_node.offset;
         child_node.mut_leaf().keys.push(key);
         child_node.mut_leaf().rows.push(row);
@@ -164,10 +170,10 @@ pub fn insert<F: Filelike>(
             .child_offsets
             .push(child_node.offset);
 
-        cache::write(table, &child_node)?;
-        cache::write(table, &root_node)?;
+        cache.write(table, &child_node)?;
+        cache.write(table, &root_node)?;
 
-        commit_metadata(table)?;
+        table.commit_metadata()?;
         return Ok(());
     }
 
@@ -176,7 +182,7 @@ pub fn insert<F: Filelike>(
 
         // TODO: this is inefficient.
         let mut child_node = root_node.clone();
-        child_node.offset = next_chunk_offset(table);
+        child_node.offset = table.next_chunk_offset();
 
         root_node.mut_internal().keys.clear();
         root_node.mut_internal().child_offsets.clear();
@@ -185,9 +191,9 @@ pub fn insert<F: Filelike>(
             .child_offsets
             .push(child_node.offset);
 
-        split_child_internal(table, &mut root_node, &mut child_node, 0)?;
+        split_child_internal(table, cache, &mut root_node, &mut child_node, 0)?;
     }
-    insert_non_full_internal(table, &mut root_node, key, row)?;
-    commit_metadata(table)?;
+    insert_non_full_internal(table, cache, &mut root_node, key, row)?;
+    table.commit_metadata()?;
     Ok(())
 }

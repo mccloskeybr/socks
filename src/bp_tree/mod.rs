@@ -1,4 +1,4 @@
-use crate::cache;
+use crate::cache::Cache;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
@@ -40,14 +40,15 @@ pub fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
 // finds the row with the associated key, else returns NotFound.
 pub fn read_row<F: Filelike>(
     table: &mut Table<F>,
+    cache: &mut Cache,
     curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
-    let node: NodeProto = cache::read(table, curr_offset)?;
+    let node: NodeProto = cache.read(table, curr_offset)?;
     match &node.node_type {
         Some(node_proto::Node_type::Internal(internal)) => {
             let idx = find_next_node_idx_for_key(&internal, key)?;
-            return read_row(table, internal.child_offsets[idx], key);
+            return read_row(table, cache, internal.child_offsets[idx], key);
         }
         Some(node_proto::Node_type::Leaf(leaf)) => {
             let idx = find_row_idx_for_key(&leaf, key);
@@ -64,12 +65,13 @@ pub fn read_row<F: Filelike>(
 // inserts the row with the associated key into the table.
 pub fn insert<F: Filelike>(
     table: &mut Table<F>,
+    cache: &mut Cache,
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
     match WRITE_STRATEGY {
         AggressiveSplit => {
-            return insert_aggressive_split::insert::<F>(table, key, row);
+            return insert_aggressive_split::insert::<F>(table, cache, key, row);
         }
     }
 }

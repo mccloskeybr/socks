@@ -15,7 +15,7 @@ fn execute_filter_equals<F: Filelike>(
     db: &mut Database<F>,
     equals: filter_proto::FilterEqualsProto,
 ) -> Result<F, Error> {
-    let table: Rc<RefCell<Table<F>>> = database::find_table_keyed_on_column(db, &equals.name)?;
+    let table: Rc<RefCell<Table<F>>> = db.find_table_keyed_on_column(&equals.name)?;
     log::trace!(
         "Filtering on column: {} in table: {}",
         equals.name,
@@ -24,7 +24,7 @@ fn execute_filter_equals<F: Filelike>(
 
     // TODO: return empty on doesn't exist instead of error.
     let key = schema::get_hashed_col_value(&equals.value);
-    let row = table::read_row(&mut table.borrow_mut(), key)?;
+    let row = table.borrow_mut().read_row(&mut db.cache, key)?;
     let pk = schema::get_col(&row, &db.table.borrow().metadata.schema.key.name);
     let pk_hash = schema::get_hashed_col_value(&pk.value);
 
