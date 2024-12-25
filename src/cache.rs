@@ -21,6 +21,7 @@ pub(crate) struct Cache {
 }
 
 impl Cache {
+    // TODO: panics on counter wrap
     fn next_counter(&mut self) -> usize {
         let counter = self.next_counter;
         self.next_counter += 1;

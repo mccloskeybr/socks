@@ -47,6 +47,5 @@ mod filelike;
 mod protos;
 mod query;
 mod schema;
-mod stats;
 mod table;
 mod validate;
