@@ -19,7 +19,7 @@ fn insert_non_full_leaf<F: Filelike>(
 ) -> Result<(), Error> {
     debug_assert!(node.has_leaf());
     let leaf: &mut LeafNodeProto = node.mut_leaf();
-    let idx = bp_tree::find_row_idx_for_key(&table.metadata.config, leaf, key);
+    let idx = bp_tree::find_row_idx_for_key(leaf, key);
 
     leaf.keys.insert(idx, key);
     leaf.rows.insert(idx, row);
@@ -35,7 +35,7 @@ fn insert_non_full_internal<F: Filelike>(
 ) -> Result<(), Error> {
     debug_assert!(node.has_internal());
 
-    let idx = bp_tree::find_next_node_idx_for_key(&table.metadata.config, node.internal(), key)?;
+    let idx = bp_tree::find_next_node_idx_for_key(node.internal(), key)?;
     debug_assert!(idx < node.internal().child_offsets.len());
     let mut child_node = cache::read(table, node.internal().child_offsets[idx])?;
     match &child_node.node_type {

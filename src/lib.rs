@@ -14,6 +14,17 @@ static CACHE_SIZE: usize = 10;
 // search. This is better for cache coherence when sufficiently low.
 static BINARY_READ_ITER_CUTOFF: usize = 10;
 
+enum ReadStrategy {
+    SequentialSearch,
+    BinarySearch,
+}
+static READ_STRATEGY: ReadStrategy = ReadStrategy::BinarySearch;
+
+enum WriteStrategy {
+    AggressiveSplit,
+}
+static WRITE_STRATEGY: WriteStrategy = WriteStrategy::AggressiveSplit;
+
 extern crate self as socks;
 mod bp_tree;
 mod cache;

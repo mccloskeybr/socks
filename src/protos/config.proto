@@ -30,15 +30,4 @@ message TableConfig {
 
   // The amount of space remaining in a chunk to consider it full.
   /* required */ uint32 chunk_overflow_size = 2;
-
-  enum InsertMethod {
-    AGGRESSIVE_SPLIT = 0;
-  }
-  InsertMethod insert_method = 3;
-
-  enum ReadMethod {
-    BINARY_SEARCH = 0;
-    INCREMENTAL = 1;
-  }
-  ReadMethod read_method = 4;
 }

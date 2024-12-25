@@ -30,8 +30,6 @@ fn setup() -> TestContext {
         .unwrap(),
         config: parse_from_str::<TableConfig>(
             "
-            insert_method: AGGRESSIVE_SPLIT
-            read_method: BINARY_SEARCH
             chunk_size: 512
             chunk_overflow_size: 10
             ",
