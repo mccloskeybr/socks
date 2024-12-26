@@ -3,60 +3,66 @@ use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::table::*;
-use crate::CACHE_SIZE;
+use crate::{CACHE_SHARD_COUNT, CACHE_SHARD_SIZE};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::Mutex;
 
-// TODO: for concurrency support, could expose the entry directly, along with
-// some locking mechanism (per-chunk).
-#[derive(Default, Clone)]
+#[derive(Default)]
 struct CacheEntry {
     node: NodeProto,
     table_id: u32,
     counter: usize,
 }
 
-#[derive(Default, Clone)]
+// LRU cache is sharded to offer basic speedups wrt. thread contention.
+// TODO: investigate other performance boosts if relevant.
+#[derive(Default)]
+struct CacheShard {
+    entries: [CacheEntry; CACHE_SHARD_SIZE],
+}
+
+// TODO: write to disk only on eviction.
+#[derive(Default)]
 pub(crate) struct Cache {
-    entries: [CacheEntry; CACHE_SIZE],
-    next_counter: usize,
+    shards: [Mutex<CacheShard>; CACHE_SHARD_COUNT],
+    lamport_clock: AtomicUsize,
+}
+
+// Finds the shard the given offset should be present in.
+fn find_shard_idx(offset: u32) -> usize {
+    (offset as usize) % CACHE_SHARD_COUNT
+}
+
+// Finds the index associated with offset, else the index of the least
+// recently used element. Returns the index, and true iff the requested index
+// was found.
+fn find_entry_idx<F: Filelike>(shard: &CacheShard, table: &Table<F>, offset: u32) -> (usize, bool) {
+    let mut lru_idx: usize = 0;
+    for idx in 0..shard.entries.len() {
+        let entry = &shard.entries[idx];
+        if entry.table_id == table.metadata.id && entry.node.offset == offset {
+            return (idx, true);
+        }
+        if entry.counter < shard.entries[lru_idx].counter {
+            lru_idx = idx;
+        }
+    }
+    return (lru_idx, false);
 }
 
 impl Cache {
-    // TODO: panics on counter wrap
-    fn next_counter(&mut self) -> usize {
-        let counter = self.next_counter;
-        self.next_counter += 1;
-        counter
-    }
-
-    // Finds the index associated with offset, else the index of the least
-    // recently used element. Returns the index, and true iff the requested index
-    // was found.
-    fn find_idx<F: Filelike>(&self, table: &Table<F>, offset: u32) -> (usize, bool) {
-        let mut lru_idx: usize = 0;
-        for idx in 0..self.entries.len() {
-            if self.entries[idx].table_id == table.metadata.id
-                && self.entries[idx].node.offset == offset
-            {
-                return (idx, true);
-            }
-            if self.entries[idx].counter < self.entries[lru_idx].counter {
-                lru_idx = idx;
-            }
-        }
-        return (lru_idx, false);
-    }
-
     pub(crate) async fn read<F: Filelike>(
         &mut self,
         table: &mut Table<F>,
         offset: u32,
     ) -> Result<NodeProto, Error> {
-        let (idx, in_cache) = self.find_idx(table, offset);
+        let shard = &mut *self.shards[find_shard_idx(offset)].lock().await;
+        let (idx, in_cache) = find_entry_idx(shard, table, offset);
         if !in_cache {
-            self.entries[idx].node = chunk::read_chunk_at(&mut table.file, offset).await?;
+            shard.entries[idx].node = chunk::read_chunk_at(&mut table.file, offset).await?;
         }
-        self.entries[idx].counter = self.next_counter();
-        Ok(self.entries[idx].node.clone())
+        shard.entries[idx].counter = self.lamport_clock.fetch_add(1, Ordering::Relaxed);
+        Ok(shard.entries[idx].node.clone())
     }
 
     pub(crate) async fn write<F: Filelike>(
@@ -64,13 +70,14 @@ impl Cache {
         table: &mut Table<F>,
         node: &NodeProto,
     ) -> Result<(), Error> {
-        let (idx, _) = self.find_idx(table, node.offset);
-        self.entries[idx].node = node.clone();
-        self.entries[idx].counter = self.next_counter();
+        let shard = &mut *self.shards[find_shard_idx(node.offset)].lock().await;
+        let (idx, _) = find_entry_idx(shard, table, node.offset);
+        shard.entries[idx].node = node.clone();
+        shard.entries[idx].counter = self.lamport_clock.fetch_add(1, Ordering::Relaxed);
         chunk::write_chunk_at(
             &mut table.file,
-            self.entries[idx].node.clone(),
-            self.entries[idx].node.offset,
+            shard.entries[idx].node.clone(),
+            shard.entries[idx].node.offset,
         )
         .await
     }

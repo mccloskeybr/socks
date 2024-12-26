@@ -4,15 +4,6 @@
 // Used to accelerate key comparison during B+ tree traversal.
 static LANE_WIDTH: usize = 8;
 
-// Number of chunks to include in the LRU cache. Helps speed up read operations by
-// saving on disk i/o for chunks already present in the cache.
-static CACHE_SIZE: usize = 10;
-
-// When searching through table B+ tree nodes using a binary search, this is the
-// number of remaining elements left until the algorithm switches to a sequential
-// search. This is better for cache coherence when sufficiently low.
-static BINARY_READ_ITER_CUTOFF: usize = 10;
-
 // The size of each file chunk, in bytes. Influences various parts of the
 // database, e.g. the size of each B+ tree node, or how many query results are
 // grouped together. Each chunk stores 1 protobuf, so the value must be less
@@ -22,6 +13,20 @@ static CHUNK_SIZE: usize = 4096;
 // The byte size buffer before considering a chunk as full.
 // TODO: this shouldn't be required if calculating proto sizes correctly.
 static CHUNK_OVERFLOW_BUFFER: usize = 5;
+
+// A basic LRU cache is used to speed up read / write operations to frequently
+// accessed chunks. It is sharded to lower thread contention.
+static CACHE_SHARD_COUNT: usize = 10;
+
+// The size (in chunks) of each cache shard before evicting the least
+// frequently used chunk. This effectively means socks can store a maximum of
+// CACHE_SHARD_COUNT * CACHE_SHARD_SIZE chunks in memory at any given time.
+static CACHE_SHARD_SIZE: usize = 10;
+
+// When searching through table B+ tree nodes using a binary search, this is the
+// number of remaining elements left until the algorithm switches to a sequential
+// search. This is better for cache coherence when sufficiently low.
+static BINARY_READ_ITER_CUTOFF: usize = 10;
 
 // Configurable read strategies for table B+ tree traversal.
 #[allow(dead_code)]
