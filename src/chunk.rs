@@ -7,6 +7,7 @@ use crate::filelike::Filelike;
 use crate::{CHUNK_OVERFLOW_BUFFER, CHUNK_SIZE};
 use protobuf::Message;
 use std::io::SeekFrom;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
 // Byte format of each chunk is the following:
 // 1. data size: u16 / 2 bytes.
@@ -64,25 +65,27 @@ fn chunk_to_bytes<M: Message>(msg: &M) -> Result<[u8; CHUNK_SIZE], Error> {
     Ok(bytes)
 }
 
-pub(crate) fn read_chunk_at<F: Filelike, M: Message>(
+pub(crate) async fn read_chunk_at<F: Filelike, M: Message>(
     file: &mut F,
     chunk_offset: u32,
 ) -> Result<M, Error> {
     let mut bytes = [0; CHUNK_SIZE];
-    file.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
-    file.read(&mut bytes)?;
+    file.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))
+        .await?;
+    file.read(&mut bytes).await?;
     chunk_from_bytes::<M>(&bytes)
 }
 
-pub(crate) fn write_chunk_at<F: Filelike, M: Message>(
+pub(crate) async fn write_chunk_at<F: Filelike, M: Message>(
     file: &mut F,
     msg: M,
     chunk_offset: u32,
 ) -> Result<(), Error> {
     let bytes: [u8; CHUNK_SIZE] = chunk_to_bytes::<M>(&msg)?;
-    file.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))?;
-    file.write(&bytes)?;
-    file.flush()?;
+    file.seek(SeekFrom::Start(chunk_offset as u64 * CHUNK_SIZE as u64))
+        .await?;
+    file.write(&bytes).await?;
+    file.flush().await?;
     Ok(())
 }
 

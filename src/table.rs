@@ -34,13 +34,13 @@ impl<F: Filelike> Table<F> {
         &self.metadata.schema.key.name == col_name
     }
 
-    pub(crate) fn commit_metadata(&mut self) -> Result<(), Error> {
+    pub(crate) async fn commit_metadata(&mut self) -> Result<(), Error> {
         log::trace!("Committing metadata.");
-        chunk::write_chunk_at(&mut self.file, self.metadata.clone(), 0)?;
+        chunk::write_chunk_at(&mut self.file, self.metadata.clone(), 0).await?;
         Ok(())
     }
 
-    pub(crate) fn create(
+    pub(crate) async fn create(
         mut file: F,
         name: String,
         id: u32,
@@ -53,13 +53,13 @@ impl<F: Filelike> Table<F> {
         metadata.root_chunk_offset = 1;
         metadata.next_chunk_offset = 2;
         {
-            chunk::write_chunk_at(&mut file, metadata.clone(), 0)?;
+            chunk::write_chunk_at(&mut file, metadata.clone(), 0).await?;
         }
         {
             let mut root_node = NodeProto::new();
             root_node.offset = 1;
             root_node.set_internal(InternalNodeProto::new());
-            chunk::write_chunk_at(&mut file, root_node, 1)?;
+            chunk::write_chunk_at(&mut file, root_node, 1).await?;
         }
         Ok(Self {
             file: file,
@@ -67,19 +67,24 @@ impl<F: Filelike> Table<F> {
         })
     }
 
-    pub(crate) fn insert(
+    pub(crate) async fn insert(
         &mut self,
         cache: &mut Cache,
         key: u32,
         row: InternalRowProto,
     ) -> Result<(), Error> {
         log::trace!("Inserting row: {row}");
-        bp_tree::insert(self, cache, key, row)
+        bp_tree::insert(self, cache, key, row).await
     }
 
-    pub(crate) fn read_row(&mut self, cache: &mut Cache, key: u32) -> Result<RowProto, Error> {
+    pub(crate) async fn read_row(
+        &mut self,
+        cache: &mut Cache,
+        key: u32,
+    ) -> Result<RowProto, Error> {
         log::trace!("Retrieving row with key: {key}");
-        let internal_row = bp_tree::read_row(self, cache, self.metadata.root_chunk_offset, key)?;
+        let internal_row =
+            bp_tree::read_row(self, cache, self.metadata.root_chunk_offset, key).await?;
         Ok(schema::internal_row_to_row(
             &internal_row,
             &self.metadata.schema,

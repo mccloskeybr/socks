@@ -20,7 +20,7 @@ impl<F: Filelike> ResultsWriter<F> {
         }
     }
 
-    pub(crate) fn write_key(&mut self, key: u32) -> Result<(), Error> {
+    pub(crate) async fn write_key(&mut self, key: u32) -> Result<(), Error> {
         if chunk::would_chunk_overflow(
             self.current_chunk.compute_size() as usize + std::mem::size_of::<u32>(),
         ) {
@@ -28,7 +28,8 @@ impl<F: Filelike> ResultsWriter<F> {
                 &mut self.file,
                 self.current_chunk.clone(),
                 self.current_chunk_offset,
-            )?;
+            )
+            .await?;
             self.current_chunk_offset += 1;
             self.current_chunk = InternalQueryResultsProto::new();
         }
@@ -36,7 +37,7 @@ impl<F: Filelike> ResultsWriter<F> {
         Ok(())
     }
 
-    pub(crate) fn write_key_row(&mut self, key: u32, row: RowProto) -> Result<(), Error> {
+    pub(crate) async fn write_key_row(&mut self, key: u32, row: RowProto) -> Result<(), Error> {
         if chunk::would_chunk_overflow(
             self.current_chunk.compute_size() as usize
                 + row.compute_size() as usize
@@ -46,7 +47,8 @@ impl<F: Filelike> ResultsWriter<F> {
                 &mut self.file,
                 self.current_chunk.clone(),
                 self.current_chunk_offset,
-            )?;
+            )
+            .await?;
             self.current_chunk_offset += 1;
             self.current_chunk = InternalQueryResultsProto::new();
         }
@@ -55,12 +57,13 @@ impl<F: Filelike> ResultsWriter<F> {
         Ok(())
     }
 
-    pub(crate) fn flush(&mut self) -> Result<(), Error> {
+    pub(crate) async fn flush(&mut self) -> Result<(), Error> {
         chunk::write_chunk_at(
             &mut self.file,
             self.current_chunk.clone(),
             self.current_chunk_offset,
-        )?;
+        )
+        .await?;
         Ok(())
     }
 }

@@ -41,30 +41,35 @@ impl<F: Filelike> Database<F> {
 
     // TODO: validate dir doesn't exist, schema.
     // probably want to move validations to the db level instead of the index level.
-    pub fn create(dir: &str, schema: DatabaseSchema) -> Result<Self, Error> {
+    pub async fn create(dir: &str, schema: DatabaseSchema) -> Result<Self, Error> {
         let mut next_table_id = 0;
         let table = Table::create(
-            F::create(format!("{}/{}", dir, "table").as_str())?,
+            F::create(format!("{}/{}", dir, "table").as_str()).await?,
             format!("Table{}", schema.table.key.name),
             next_table_id,
             schema.table.clone().unwrap(),
-        )?;
+        )
+        .await?;
         next_table_id += 1;
 
         let mut secondary_indexes = Vec::<Rc<RefCell<Table<F>>>>::new();
         for secondary_index_schema in schema.secondary_indexes {
-            secondary_indexes.push(Rc::new(RefCell::new(Table::create(
-                F::create(format!("{}/{}", dir, &secondary_index_schema.key.name).as_str())?,
-                format!(
-                    "Table{}Index{}",
-                    schema.table.key.name, secondary_index_schema.key.name
-                ),
-                next_table_id,
-                schema::create_table_schema_for_index(
-                    &secondary_index_schema,
-                    &schema.table.as_ref().unwrap(),
-                ),
-            )?)));
+            secondary_indexes.push(Rc::new(RefCell::new(
+                Table::create(
+                    F::create(format!("{}/{}", dir, &secondary_index_schema.key.name).as_str())
+                        .await?,
+                    format!(
+                        "Table{}Index{}",
+                        schema.table.key.name, secondary_index_schema.key.name
+                    ),
+                    next_table_id,
+                    schema::create_table_schema_for_index(
+                        &secondary_index_schema,
+                        &schema.table.as_ref().unwrap(),
+                    ),
+                )
+                .await?,
+            )));
             next_table_id += 1;
         }
 
@@ -76,13 +81,14 @@ impl<F: Filelike> Database<F> {
     }
 
     // TODO: parallel insertion, failure recovery.
-    pub fn insert(&mut self, op: InsertProto) -> Result<(), Error> {
+    pub async fn insert(&mut self, op: InsertProto) -> Result<(), Error> {
         let table_key =
             schema::get_hashed_key_from_row(&op.row, &self.table.borrow().metadata.schema);
         let table_row_internal = schema::row_to_internal_row(&op.row);
         self.table
             .borrow_mut()
-            .insert(&mut self.cache, table_key, table_row_internal)?;
+            .insert(&mut self.cache, table_key, table_row_internal)
+            .await?;
 
         for secondary_index in &mut self.secondary_indexes {
             let index_row = schema::table_row_to_index_row(
@@ -97,20 +103,22 @@ impl<F: Filelike> Database<F> {
             let index_row_internal = schema::row_to_internal_row(&index_row);
             secondary_index
                 .borrow_mut()
-                .insert(&mut self.cache, index_key, index_row_internal)?;
+                .insert(&mut self.cache, index_key, index_row_internal)
+                .await?;
         }
 
         Ok(())
     }
 
-    pub fn read_row(&mut self, op: ReadRowProto) -> Result<RowProto, Error> {
+    pub async fn read_row(&mut self, op: ReadRowProto) -> Result<RowProto, Error> {
         let hashed_key = schema::get_hashed_col_value(&op.column.value);
         self.table
             .borrow_mut()
             .read_row(&mut self.cache, hashed_key)
+            .await
     }
 
-    pub fn query(&mut self, op: QueryProto) -> Result<F, Error> {
-        query::execute_query::<F>(self, op)
+    pub async fn query(&mut self, op: QueryProto) -> Result<F, Error> {
+        query::execute_query::<F>(self, op).await
     }
 }

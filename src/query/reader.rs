@@ -22,13 +22,14 @@ impl<F: Filelike> ResultsReader<F> {
 
     // TODO: stages currently read until there is an error, assuming that the first error returned
     // will be of type "the file is done". this assumption likely doesn't always hold.
-    pub(crate) fn next_key(&mut self) -> Result<u32, Error> {
+    pub(crate) async fn next_key(&mut self) -> Result<u32, Error> {
         self.idx = self.idx.wrapping_add(1);
         if self.idx >= self.current_chunk.keys.len() {
             self.idx = 0;
             self.current_chunk_offset = self.current_chunk_offset.wrapping_add(1);
             dbg!("{}", self.current_chunk_offset);
-            self.current_chunk = chunk::read_chunk_at(&mut self.file, self.current_chunk_offset)?;
+            self.current_chunk =
+                chunk::read_chunk_at(&mut self.file, self.current_chunk_offset).await?;
             // NOTE: it seems like cursors don't OOB when reading outside written bounds?
             if self.current_chunk.keys.len() == 0 {
                 return Err(Error::OutOfBounds("".to_string()));

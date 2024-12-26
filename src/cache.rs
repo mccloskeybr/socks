@@ -46,20 +46,20 @@ impl Cache {
         return (lru_idx, false);
     }
 
-    pub(crate) fn read<F: Filelike>(
+    pub(crate) async fn read<F: Filelike>(
         &mut self,
         table: &mut Table<F>,
         offset: u32,
     ) -> Result<NodeProto, Error> {
         let (idx, in_cache) = self.find_idx(table, offset);
         if !in_cache {
-            self.entries[idx].node = chunk::read_chunk_at(&mut table.file, offset)?;
+            self.entries[idx].node = chunk::read_chunk_at(&mut table.file, offset).await?;
         }
         self.entries[idx].counter = self.next_counter();
         Ok(self.entries[idx].node.clone())
     }
 
-    pub(crate) fn write<F: Filelike>(
+    pub(crate) async fn write<F: Filelike>(
         &mut self,
         table: &mut Table<F>,
         node: &NodeProto,
@@ -72,5 +72,6 @@ impl Cache {
             self.entries[idx].node.clone(),
             self.entries[idx].node.offset,
         )
+        .await
     }
 }

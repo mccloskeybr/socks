@@ -1,7 +1,8 @@
 use crate::error::*;
-use std::fs::File;
-use std::fs::OpenOptions;
-use std::io::{Cursor, Read, Seek, Write};
+use std::io::Cursor;
+use std::marker::Unpin;
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 
 // there isn't a unified standard interface that can be used between
 // data on disk and in memory, but both are useful (for testing and
@@ -10,26 +11,27 @@ use std::io::{Cursor, Read, Seek, Write};
 // Cursor<T> can be used as an in-memory File, so create a trait to
 // facilitate that behavior.
 
-pub trait Filelike: Read + Write + Seek + Sized {
-    fn create(path: &str) -> Result<Self, Error>;
+#[allow(async_fn_in_trait)]
+pub trait Filelike: Unpin + AsyncRead + AsyncWrite + AsyncSeek + Sized {
+    async fn create(path: &str) -> Result<Self, Error>;
 }
 
 impl Filelike for File {
-    fn create(path: &str) -> Result<Self, Error> {
-        let file = OpenOptions::new()
+    async fn create(path: &str) -> Result<Self, Error> {
+        Ok(OpenOptions::new()
             .read(true)
             .write(true)
             .create_new(true)
-            .open(path)?;
-        Ok(file)
+            .open(path)
+            .await?)
     }
 }
 
 impl<T: Default> Filelike for Cursor<T>
 where
-    Cursor<T>: Read + Write + Seek,
+    Cursor<T>: Unpin + AsyncRead + AsyncWrite + AsyncSeek,
 {
-    fn create(_path: &str) -> Result<Self, Error> {
+    async fn create(_path: &str) -> Result<Self, Error> {
         Ok(Cursor::<T>::new(T::default()))
     }
 }

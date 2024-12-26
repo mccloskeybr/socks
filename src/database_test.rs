@@ -40,10 +40,10 @@ fn setup() -> TestContext {
     }
 }
 
-#[test]
-fn insert_single_success() -> Result<(), Error> {
+#[tokio::test]
+async fn insert_single_success() -> Result<(), Error> {
     let context = setup();
-    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema)?;
+    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -63,12 +63,12 @@ fn insert_single_success() -> Result<(), Error> {
         }
         ",
     )?;
-    db.insert(insert_operation.clone())?;
+    db.insert(insert_operation.clone()).await?;
 
     // row in primary index
     {
         let expected_table_row_internal = insert_operation.row.clone().unwrap();
-        let table_row_internal = db.table.borrow_mut().read_row(&mut db.cache, 1)?;
+        let table_row_internal = db.table.borrow_mut().read_row(&mut db.cache, 1).await?;
         assert_eq!(expected_table_row_internal, table_row_internal);
     }
     // row in secondary index
@@ -80,17 +80,20 @@ fn insert_single_success() -> Result<(), Error> {
             &db.table.borrow().metadata.schema.as_ref().unwrap(),
         );
         let expected_index_row_internal = index_row;
-        let index_row_internal = secondary_index.borrow_mut().read_row(&mut db.cache, 2)?;
+        let index_row_internal = secondary_index
+            .borrow_mut()
+            .read_row(&mut db.cache, 2)
+            .await?;
         assert_eq!(expected_index_row_internal, index_row_internal);
     }
 
     Ok(())
 }
 
-#[test]
-fn read_single_success() -> Result<(), Error> {
+#[tokio::test]
+async fn read_single_success() -> Result<(), Error> {
     let context = setup();
-    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema)?;
+    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -110,7 +113,7 @@ fn read_single_success() -> Result<(), Error> {
         }
         ",
     )?;
-    db.insert(insert_operation.clone())?;
+    db.insert(insert_operation.clone()).await?;
 
     let read_operation = parse_from_str::<ReadRowProto>(
         "
@@ -122,17 +125,17 @@ fn read_single_success() -> Result<(), Error> {
         }
         ",
     )?;
-    let row = db.read_row(read_operation);
+    let row = db.read_row(read_operation).await;
 
     assert_eq!(insert_operation.row.unwrap(), row.unwrap());
 
     Ok(())
 }
 
-#[test]
-fn query_success() -> Result<(), Error> {
+#[tokio::test]
+async fn query_success() -> Result<(), Error> {
     let context = setup();
-    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema)?;
+    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
 
     for i in 0..50 {
         let mut key = ColumnProto::new();
@@ -148,7 +151,7 @@ fn query_success() -> Result<(), Error> {
 
         let mut insert_operation = InsertProto::new();
         insert_operation.row = MessageField::some(row);
-        db.insert(insert_operation)?;
+        db.insert(insert_operation).await?;
     }
 
     let query_operation = parse_from_str::<QueryProto>(
@@ -167,9 +170,9 @@ fn query_success() -> Result<(), Error> {
         }
         ",
     )?;
-    let mut query_results_file = db.query(query_operation)?;
+    let mut query_results_file = db.query(query_operation).await?;
     let query_results: InternalQueryResultsProto =
-        chunk::read_chunk_at(&mut query_results_file, 0)?;
+        chunk::read_chunk_at(&mut query_results_file, 0).await?;
 
     let expected_query_results = parse_from_str::<InternalQueryResultsProto>(
         "
