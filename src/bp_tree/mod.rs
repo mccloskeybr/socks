@@ -1,9 +1,11 @@
-use crate::cache::Cache;
+use crate::buffer_pool::BufferPool;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::table::*;
 use crate::{ReadStrategy::*, WriteStrategy::*, READ_STRATEGY, WRITE_STRATEGY};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 mod insert_aggressive_split;
 mod read_binary_search;
@@ -42,15 +44,23 @@ pub(crate) fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
 // finds the row with the associated key, else returns NotFound.
 pub(crate) async fn read_row<F: Filelike>(
     table: &mut Table<F>,
-    cache: &mut Cache,
+    buffer_pool: &mut BufferPool<F>,
     curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
-    let node: NodeProto = cache.read(table, curr_offset).await?;
+    let node: Arc<Mutex<NodeProto>> = buffer_pool.read_from_table(table, curr_offset).await?;
+    let node = node.lock().await;
     match &node.node_type {
         Some(node_proto::Node_type::Internal(internal)) => {
             let idx = find_next_node_idx_for_key(&internal, key)?;
-            return Box::pin(read_row(table, cache, internal.child_offsets[idx], key)).await;
+            drop(node);
+            return Box::pin(read_row(
+                table,
+                buffer_pool,
+                internal.child_offsets[idx],
+                key,
+            ))
+            .await;
         }
         Some(node_proto::Node_type::Leaf(leaf)) => {
             let idx = find_row_idx_for_key(&leaf, key);
@@ -66,13 +76,13 @@ pub(crate) async fn read_row<F: Filelike>(
 // inserts the row with the associated key into the table.
 pub(crate) async fn insert<F: Filelike>(
     table: &mut Table<F>,
-    cache: &mut Cache,
+    buffer_pool: &mut BufferPool<F>,
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
     match WRITE_STRATEGY {
         AggressiveSplit => {
-            return insert_aggressive_split::insert::<F>(table, cache, key, row).await;
+            return insert_aggressive_split::insert::<F>(table, buffer_pool, key, row).await;
         }
     }
 }

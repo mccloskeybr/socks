@@ -2,7 +2,7 @@
 #[path = "./database_test.rs"]
 mod test;
 
-use crate::cache::Cache;
+use crate::cache::ShardedCache;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::config::*;
@@ -16,7 +16,7 @@ use std::rc::Rc;
 pub struct Database<F: Filelike> {
     pub(crate) table: Rc<RefCell<Table<F>>>,
     pub(crate) secondary_indexes: Vec<Rc<RefCell<Table<F>>>>,
-    pub(crate) cache: Cache,
+    pub(crate) cache: ShardedCache,
 }
 
 impl<F: Filelike> Database<F> {
@@ -76,7 +76,7 @@ impl<F: Filelike> Database<F> {
         Ok(Self {
             table: Rc::new(RefCell::new(table)),
             secondary_indexes: secondary_indexes,
-            cache: Cache::default(),
+            cache: ShardedCache::new(),
         })
     }
 

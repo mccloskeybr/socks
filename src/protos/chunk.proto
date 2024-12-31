@@ -14,15 +14,12 @@ message TableMetadataProto {
 message NodeProto {
   uint32 offset = 1;
   uint32 parent_offset = 2;
-  uint32 left_sibling_offset = 3;
-  uint32 right_sibling_offset = 4;
   oneof node_type {
     InternalNodeProto internal = 5;
     LeafNodeProto leaf = 6;
   }
 }
 
-// TODO: pointers to siblings
 message InternalNodeProto {
   // NOTE: keys[i] < all keys in child_ids[i].
   // len(keys) may be eq, -1 from len(child_ids).

@@ -1,4 +1,4 @@
-use crate::cache::Cache;
+use crate::cache::ShardedCache;
 use crate::chunk;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
@@ -13,7 +13,7 @@ use std::io::Cursor;
 struct TestContext {
     file: Cursor<Vec<u8>>,
     schema: TableSchema,
-    cache: Cache,
+    cache: ShardedCache,
 }
 
 fn setup() -> TestContext {
@@ -29,7 +29,7 @@ fn setup() -> TestContext {
             ",
         )
         .unwrap(),
-        cache: Cache::default(),
+        cache: ShardedCache::new(),
     }
 }
 

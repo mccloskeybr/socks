@@ -3,7 +3,7 @@
 mod test;
 
 use crate::bp_tree;
-use crate::cache::Cache;
+use crate::cache::ShardedCache;
 use crate::chunk;
 use crate::error::*;
 use crate::filelike::Filelike;
@@ -12,6 +12,8 @@ use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::schema;
 use protobuf::MessageField;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 // Table file format:
 // Chunk 0:          Metadata chunk
@@ -19,7 +21,7 @@ use protobuf::MessageField;
 // Chunks n+1 - end: RowData chunks
 
 pub(crate) struct Table<F: Filelike> {
-    pub(crate) file: F,
+    pub(crate) file: Arc<Mutex<F>>,
     pub(crate) metadata: TableMetadataProto,
 }
 
@@ -62,14 +64,14 @@ impl<F: Filelike> Table<F> {
             chunk::write_chunk_at(&mut file, root_node, 1).await?;
         }
         Ok(Self {
-            file: file,
+            file: Arc::new(Mutex::new(file)),
             metadata: metadata,
         })
     }
 
     pub(crate) async fn insert(
         &mut self,
-        cache: &mut Cache,
+        cache: &mut ShardedCache,
         key: u32,
         row: InternalRowProto,
     ) -> Result<(), Error> {
@@ -79,7 +81,7 @@ impl<F: Filelike> Table<F> {
 
     pub(crate) async fn read_row(
         &mut self,
-        cache: &mut Cache,
+        cache: &mut ShardedCache,
         key: u32,
     ) -> Result<RowProto, Error> {
         log::trace!("Retrieving row with key: {key}");
