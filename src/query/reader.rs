@@ -1,21 +1,24 @@
-use crate::chunk;
+use crate::buffer::Buffer;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub(crate) struct ResultsReader<F: Filelike> {
-    file: F,
-    current_chunk: InternalQueryResultsProto,
-    current_chunk_offset: u32,
+    file: Arc<Mutex<F>>,
+    current_buffer: Buffer<F, InternalQueryResultsProto>,
+    current_buffer_offset: u32,
     idx: usize,
 }
 
 impl<F: Filelike> ResultsReader<F> {
     pub(crate) fn new(file: F) -> Self {
+        let file = Arc::new(Mutex::new(file));
         Self {
-            file: file,
-            current_chunk: InternalQueryResultsProto::new(),
-            current_chunk_offset: std::u32::MAX,
+            file: file.clone(),
+            current_buffer: Buffer::new_for_file(file, 0, InternalQueryResultsProto::new()),
+            current_buffer_offset: std::u32::MAX,
             idx: std::usize::MAX,
         }
     }
@@ -24,17 +27,17 @@ impl<F: Filelike> ResultsReader<F> {
     // will be of type "the file is done". this assumption likely doesn't always hold.
     pub(crate) async fn next_key(&mut self) -> Result<u32, Error> {
         self.idx = self.idx.wrapping_add(1);
-        if self.idx >= self.current_chunk.keys.len() {
+        if self.idx >= self.current_buffer.get().keys.len() {
             self.idx = 0;
-            self.current_chunk_offset = self.current_chunk_offset.wrapping_add(1);
-            dbg!("{}", self.current_chunk_offset);
-            self.current_chunk =
-                chunk::read_chunk_at(&mut self.file, self.current_chunk_offset).await?;
-            // NOTE: it seems like cursors don't OOB when reading outside written bounds?
-            if self.current_chunk.keys.len() == 0 {
+            self.current_buffer_offset = self.current_buffer_offset.wrapping_add(1);
+            dbg!("{}", self.current_buffer_offset);
+            self.current_buffer =
+                Buffer::read_from_file(self.file.clone(), self.current_buffer_offset).await?;
+            // NOTE: it seems like cursors don't OOB when reading outside written bounds.
+            if self.current_buffer.get().keys.len() == 0 {
                 return Err(Error::OutOfBounds("".to_string()));
             }
         }
-        Ok(self.current_chunk.keys[self.idx])
+        Ok(self.current_buffer.get().keys[self.idx])
     }
 }

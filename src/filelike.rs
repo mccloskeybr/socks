@@ -1,4 +1,5 @@
 use crate::error::*;
+use std::fmt::Debug;
 use std::io::Cursor;
 use std::marker::Unpin;
 use tokio::fs::{File, OpenOptions};
@@ -12,7 +13,7 @@ use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 // facilitate that behavior.
 
 #[allow(async_fn_in_trait)]
-pub trait Filelike: Unpin + AsyncRead + AsyncWrite + AsyncSeek + Sized {
+pub trait Filelike: Debug + Unpin + AsyncRead + AsyncWrite + AsyncSeek + Sized {
     async fn create(path: &str) -> Result<Self, Error>;
 }
 
@@ -29,7 +30,7 @@ impl Filelike for File {
 
 impl<T: Default> Filelike for Cursor<T>
 where
-    Cursor<T>: Unpin + AsyncRead + AsyncWrite + AsyncSeek,
+    Cursor<T>: Debug + Unpin + AsyncRead + AsyncWrite + AsyncSeek,
 {
     async fn create(_path: &str) -> Result<Self, Error> {
         Ok(Cursor::<T>::new(T::default()))

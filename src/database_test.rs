@@ -1,4 +1,4 @@
-use crate::chunk;
+use crate::buffer::Buffer;
 use crate::database::Database;
 use crate::error::*;
 use crate::protos::generated::chunk::*;
@@ -8,6 +8,10 @@ use crate::schema;
 use protobuf::text_format::parse_from_str;
 use protobuf::MessageField;
 use std::io::Cursor;
+use std::sync::Arc;
+use tokio::sync::Mutex;
+
+type QueryResultsBuffer = Buffer<Cursor<Vec<u8>>, InternalQueryResultsProto>;
 
 struct TestContext {
     schema: DatabaseSchema,
@@ -68,7 +72,11 @@ async fn insert_single_success() -> Result<(), Error> {
     // row in primary index
     {
         let expected_table_row_internal = insert_operation.row.clone().unwrap();
-        let table_row_internal = db.table.borrow_mut().read_row(&mut db.cache, 1).await?;
+        let table_row_internal = db
+            .table
+            .borrow_mut()
+            .read_row(&mut db.buffer_pool, 1)
+            .await?;
         assert_eq!(expected_table_row_internal, table_row_internal);
     }
     // row in secondary index
@@ -82,7 +90,7 @@ async fn insert_single_success() -> Result<(), Error> {
         let expected_index_row_internal = index_row;
         let index_row_internal = secondary_index
             .borrow_mut()
-            .read_row(&mut db.cache, 2)
+            .read_row(&mut db.buffer_pool, 2)
             .await?;
         assert_eq!(expected_index_row_internal, index_row_internal);
     }
@@ -170,9 +178,9 @@ async fn query_success() -> Result<(), Error> {
         }
         ",
     )?;
-    let mut query_results_file = db.query(query_operation).await?;
-    let query_results: InternalQueryResultsProto =
-        chunk::read_chunk_at(&mut query_results_file, 0).await?;
+    let query_results_file = db.query(query_operation).await?;
+    let query_results =
+        QueryResultsBuffer::read_from_file(Arc::new(Mutex::new(query_results_file)), 0).await?;
 
     let expected_query_results = parse_from_str::<InternalQueryResultsProto>(
         "
@@ -193,7 +201,7 @@ async fn query_success() -> Result<(), Error> {
         }
         ",
     )?;
-    assert_eq!(query_results, expected_query_results);
+    assert_eq!(query_results.data, expected_query_results);
 
     Ok(())
 }

@@ -45,7 +45,5 @@ pub(crate) async fn execute_intersect<F: Filelike>(
             }
         }
     }
-    out.flush().await?;
-
-    Ok(out.file)
+    out.finish().await
 }

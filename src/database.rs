@@ -2,7 +2,7 @@
 #[path = "./database_test.rs"]
 mod test;
 
-use crate::cache::ShardedCache;
+use crate::buffer_pool::BufferPool;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::config::*;
@@ -16,7 +16,7 @@ use std::rc::Rc;
 pub struct Database<F: Filelike> {
     pub(crate) table: Rc<RefCell<Table<F>>>,
     pub(crate) secondary_indexes: Vec<Rc<RefCell<Table<F>>>>,
-    pub(crate) cache: ShardedCache,
+    pub(crate) buffer_pool: BufferPool<F>,
 }
 
 impl<F: Filelike> Database<F> {
@@ -76,7 +76,7 @@ impl<F: Filelike> Database<F> {
         Ok(Self {
             table: Rc::new(RefCell::new(table)),
             secondary_indexes: secondary_indexes,
-            cache: ShardedCache::new(),
+            buffer_pool: BufferPool::new(),
         })
     }
 
@@ -87,7 +87,7 @@ impl<F: Filelike> Database<F> {
         let table_row_internal = schema::row_to_internal_row(&op.row);
         self.table
             .borrow_mut()
-            .insert(&mut self.cache, table_key, table_row_internal)
+            .insert(&mut self.buffer_pool, table_key, table_row_internal)
             .await?;
 
         for secondary_index in &mut self.secondary_indexes {
@@ -103,7 +103,7 @@ impl<F: Filelike> Database<F> {
             let index_row_internal = schema::row_to_internal_row(&index_row);
             secondary_index
                 .borrow_mut()
-                .insert(&mut self.cache, index_key, index_row_internal)
+                .insert(&mut self.buffer_pool, index_key, index_row_internal)
                 .await?;
         }
 
@@ -114,7 +114,7 @@ impl<F: Filelike> Database<F> {
         let hashed_key = schema::get_hashed_col_value(&op.column.value);
         self.table
             .borrow_mut()
-            .read_row(&mut self.cache, hashed_key)
+            .read_row(&mut self.buffer_pool, hashed_key)
             .await
     }
 

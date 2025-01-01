@@ -4,8 +4,6 @@ use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::table::*;
 use crate::{ReadStrategy::*, WriteStrategy::*, READ_STRATEGY, WRITE_STRATEGY};
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 mod insert_aggressive_split;
 mod read_binary_search;
@@ -48,19 +46,14 @@ pub(crate) async fn read_row<F: Filelike>(
     curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
-    let node: Arc<Mutex<NodeProto>> = buffer_pool.read_from_table(table, curr_offset).await?;
-    let node = node.lock().await;
-    match &node.node_type {
+    let node_buffer_mutex = buffer_pool.read_from_table(table, curr_offset).await?;
+    let node_buffer = node_buffer_mutex.lock().await;
+    match &node_buffer.get().node_type {
         Some(node_proto::Node_type::Internal(internal)) => {
             let idx = find_next_node_idx_for_key(&internal, key)?;
-            drop(node);
-            return Box::pin(read_row(
-                table,
-                buffer_pool,
-                internal.child_offsets[idx],
-                key,
-            ))
-            .await;
+            let child_offset = internal.child_offsets[idx];
+            drop(node_buffer);
+            return Box::pin(read_row(table, buffer_pool, child_offset, key)).await;
         }
         Some(node_proto::Node_type::Leaf(leaf)) => {
             let idx = find_row_idx_for_key(&leaf, key);

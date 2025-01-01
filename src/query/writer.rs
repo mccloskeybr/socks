@@ -1,69 +1,70 @@
-use crate::chunk;
+use crate::buffer::Buffer;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::operations::*;
 use protobuf::Message;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub(crate) struct ResultsWriter<F: Filelike> {
-    pub(crate) file: F,
-    current_chunk: InternalQueryResultsProto,
-    current_chunk_offset: u32,
+    current_buffer: Buffer<F, InternalQueryResultsProto>,
+    current_buffer_offset: u32,
 }
 
 impl<F: Filelike> ResultsWriter<F> {
     pub(crate) fn new(file: F) -> Self {
         Self {
-            file: file,
-            current_chunk: InternalQueryResultsProto::new(),
-            current_chunk_offset: 0,
+            current_buffer: Buffer::new_for_file(
+                Arc::new(Mutex::new(file)),
+                0,
+                InternalQueryResultsProto::new(),
+            ),
+            current_buffer_offset: 0,
         }
     }
 
     pub(crate) async fn write_key(&mut self, key: u32) -> Result<(), Error> {
-        if chunk::would_chunk_overflow(
-            self.current_chunk.compute_size() as usize + std::mem::size_of::<u32>(),
-        ) {
-            chunk::write_chunk_at(
-                &mut self.file,
-                self.current_chunk.clone(),
-                self.current_chunk_offset,
-            )
-            .await?;
-            self.current_chunk_offset += 1;
-            self.current_chunk = InternalQueryResultsProto::new();
+        if self
+            .current_buffer
+            .would_overflow(std::mem::size_of::<u32>())
+        {
+            let file = self.current_buffer.file.clone();
+            self.current_buffer.write_to_table().await?;
+            self.current_buffer_offset += 1;
+            self.current_buffer = Buffer::new_for_file(
+                file,
+                self.current_buffer_offset,
+                InternalQueryResultsProto::new(),
+            );
         }
-        self.current_chunk.keys.push(key);
+        self.current_buffer.get_mut().keys.push(key);
         Ok(())
     }
 
     pub(crate) async fn write_key_row(&mut self, key: u32, row: RowProto) -> Result<(), Error> {
-        if chunk::would_chunk_overflow(
-            self.current_chunk.compute_size() as usize
-                + row.compute_size() as usize
-                + std::mem::size_of::<u32>(),
-        ) {
-            chunk::write_chunk_at(
-                &mut self.file,
-                self.current_chunk.clone(),
-                self.current_chunk_offset,
-            )
-            .await?;
-            self.current_chunk_offset += 1;
-            self.current_chunk = InternalQueryResultsProto::new();
+        if self
+            .current_buffer
+            .would_overflow(row.compute_size() as usize + std::mem::size_of::<u32>())
+        {
+            let file = self.current_buffer.file.clone();
+            self.current_buffer.write_to_table().await?;
+            self.current_buffer_offset += 1;
+            self.current_buffer = Buffer::new_for_file(
+                file,
+                self.current_buffer_offset,
+                InternalQueryResultsProto::new(),
+            );
         }
-        self.current_chunk.keys.push(key);
-        self.current_chunk.rows.push(row);
+        self.current_buffer.get_mut().keys.push(key);
+        self.current_buffer.get_mut().rows.push(row);
         Ok(())
     }
 
-    pub(crate) async fn flush(&mut self) -> Result<(), Error> {
-        chunk::write_chunk_at(
-            &mut self.file,
-            self.current_chunk.clone(),
-            self.current_chunk_offset,
-        )
-        .await?;
-        Ok(())
+    pub(crate) async fn finish(mut self) -> Result<F, Error> {
+        self.current_buffer.write_to_table().await?;
+        Ok(Arc::into_inner(self.current_buffer.file)
+            .unwrap()
+            .into_inner())
     }
 }

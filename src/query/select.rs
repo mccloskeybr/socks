@@ -16,9 +16,11 @@ pub(crate) async fn execute_select<F: Filelike>(
     let mut dep = ResultsReader::new(query::execute_query(db, select.dep.unwrap()).await?);
     let table: Rc<RefCell<Table<F>>> = db.table.clone();
     while let Ok(key) = dep.next_key().await {
-        let row = table.borrow_mut().read_row(&mut db.cache, key).await?;
+        let row = table
+            .borrow_mut()
+            .read_row(&mut db.buffer_pool, key)
+            .await?;
         out.write_key_row(key, row).await?;
     }
-    out.flush().await?;
-    Ok(out.file)
+    out.finish().await
 }

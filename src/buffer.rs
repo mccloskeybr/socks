@@ -17,7 +17,6 @@ use tokio::sync::Mutex;
 // 2. data: [u8] proto message to end of section.
 // Each section is guaranteed to be of a configurable static size (BUFFER_SIZE).
 
-// TODO: how expensive is it to copy File structs / are there other implications?
 #[derive(Debug)]
 pub(crate) struct Buffer<F: Filelike, M: Message> {
     pub(crate) file: Arc<Mutex<F>>,
@@ -76,17 +75,21 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         Ok(M::parse_from_bytes(&slice)?)
     }
 
-    pub(crate) fn new_for_table(table: &mut Table<F>) -> Self {
+    pub(crate) fn new_for_file(file: Arc<Mutex<F>>, offset: u32, data: M) -> Self {
         Self {
-            file: table.file.clone(),
-            offset: table.next_chunk_offset(),
-            data: M::new(),
-            is_dirty: false,
+            file: file,
+            offset: offset,
+            data: data,
+            is_dirty: true,
         }
     }
 
-    pub(crate) async fn read_from_table(table: &mut Table<F>, offset: u32) -> Result<Self, Error> {
-        let file = table.file.clone();
+    // TODO: s/new/new_table_next (or something)
+    pub(crate) async fn new_for_table(table: &mut Table<F>) -> Self {
+        Self::new_for_file(table.file.clone(), table.next_chunk_offset(), M::new())
+    }
+
+    pub(crate) async fn read_from_file(file: Arc<Mutex<F>>, offset: u32) -> Result<Self, Error> {
         let mut bytes = [0; BUFFER_SIZE];
         {
             let mut file_lock = file.lock().await;
@@ -104,8 +107,14 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         })
     }
 
+    pub(crate) async fn read_from_table(table: &mut Table<F>, offset: u32) -> Result<Self, Error> {
+        let file = table.file.clone();
+        Self::read_from_file(file, offset).await
+    }
+
+    // TODO: s/table/file
     pub(crate) async fn write_to_table(&mut self) -> Result<(), Error> {
-        debug_assert!(!self.would_overflow(0));
+        assert!(!self.would_overflow(0));
         let bytes: [u8; BUFFER_SIZE] = Self::message_to_bytes(&self.data)?;
         {
             let mut file_lock = self.file.lock().await;
@@ -115,6 +124,7 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
             file_lock.write(&bytes).await?;
             file_lock.flush().await?;
         }
+        log::trace!("wrote to offset: {}", self.offset);
         Ok(())
     }
 

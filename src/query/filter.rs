@@ -21,14 +21,16 @@ async fn execute_filter_equals<F: Filelike>(
 
     // TODO: return empty on doesn't exist instead of error.
     let key = schema::get_hashed_col_value(&equals.value);
-    let row = table.borrow_mut().read_row(&mut db.cache, key).await?;
+    let row = table
+        .borrow_mut()
+        .read_row(&mut db.buffer_pool, key)
+        .await?;
     let pk = schema::get_col(&row, &db.table.borrow().metadata.schema.key.name);
     let pk_hash = schema::get_hashed_col_value(&pk.value);
 
     let mut out = ResultsWriter::new(F::create("TODO").await?);
     out.write_key(pk_hash).await?;
-    out.flush().await?;
-    Ok(out.file)
+    out.finish().await
 }
 
 fn execute_filter_in_range<F: Filelike>(
