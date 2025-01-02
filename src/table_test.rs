@@ -9,6 +9,7 @@ use crate::table::Table;
 use crate::BUFFER_SIZE;
 use protobuf::text_format::parse_from_str;
 use std::io::Cursor;
+use std::sync::Arc;
 
 type MetadataBuffer = Buffer<Cursor<Vec<u8>>, TableMetadataProto>;
 type NodeBuffer = Buffer<Cursor<Vec<u8>>, NodeProto>;
@@ -71,7 +72,7 @@ async fn create_ok() -> Result<(), Error> {
 #[tokio::test]
 async fn insert_single_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
 
     let mut col = ValueProto::new();
     col.set_int_value(1);
@@ -88,7 +89,6 @@ async fn insert_single_ok() -> Result<(), Error> {
     );
 
     let root = NodeBuffer::read_from_file(table.file.clone(), 1).await?;
-    dbg!(&root.data);
     assert_eq!(root.data.offset, 1);
     assert!(root.data.has_internal());
     assert_eq!(root.data.internal().keys.len(), 0);
@@ -106,7 +106,7 @@ async fn insert_single_ok() -> Result<(), Error> {
 #[tokio::test]
 async fn insert_sorted() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
 
     let mut col_1 = ValueProto::new();
     col_1.set_int_value(1);
@@ -158,7 +158,7 @@ async fn insert_sorted() -> Result<(), Error> {
 #[tokio::test]
 async fn insert_with_split_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
 
     for i in 0..500 {
         let mut col = ValueProto::new();
@@ -192,7 +192,7 @@ async fn insert_with_split_ok() -> Result<(), Error> {
 #[tokio::test]
 async fn read_row_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(
+    let table = Table::create(
         context.file,
         "TestTable".to_string(),
         0,
@@ -214,7 +214,7 @@ async fn read_row_ok() -> Result<(), Error> {
 #[tokio::test]
 async fn read_row_many_ok() -> Result<(), Error> {
     let mut context = setup();
-    let mut table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
     let num_iter = 100;
 
     for i in 0..num_iter {
@@ -241,6 +241,52 @@ async fn read_row_many_ok() -> Result<(), Error> {
         expected_read_result.columns.push(expected_col_val);
 
         assert_eq!(read_result, expected_read_result);
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn async_read_write_success() -> Result<(), Error> {
+    let mut context = setup();
+    let table =
+        Arc::new(Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?);
+    let num_iter = 100;
+
+    let mut task_set = tokio::task::JoinSet::new();
+    for i in 0..num_iter {
+        let buffer_pool: &mut BufferPool<Cursor<Vec<u8>>> =
+            unsafe { std::mem::transmute(&mut context.buffer_pool) };
+        let table = table.clone();
+        task_set.spawn(async move {
+            let mut col = ValueProto::new();
+            col.set_int_value(i);
+            let mut row = InternalRowProto::new();
+            row.col_values.push(col);
+
+            table.insert(buffer_pool, i as u32, row).await.unwrap();
+        });
+    }
+    task_set.join_all().await;
+
+    for i in 0..num_iter {
+        let buffer_pool: &mut BufferPool<Cursor<Vec<u8>>> =
+            unsafe { std::mem::transmute(&mut context.buffer_pool) };
+        let table = table.clone();
+        tokio::spawn(async move {
+            let read_result = table.read_row(buffer_pool, i as u32).await.unwrap();
+
+            let mut expected_col_val = ColumnProto::new();
+            expected_col_val.name = "Key".to_string();
+            expected_col_val
+                .value
+                .mut_or_insert_default()
+                .set_int_value(i);
+            let mut expected_read_result = RowProto::new();
+            expected_read_result.columns.push(expected_col_val);
+
+            assert_eq!(read_result, expected_read_result);
+        });
     }
 
     Ok(())

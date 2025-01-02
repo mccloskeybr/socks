@@ -8,6 +8,7 @@ pub enum Error {
     Other(Box<dyn std::error::Error>),
 }
 
+unsafe impl Send for Error {}
 impl std::error::Error for Error {}
 
 impl std::fmt::Display for Error {

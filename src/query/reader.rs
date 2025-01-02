@@ -30,7 +30,6 @@ impl<F: Filelike> ResultsReader<F> {
         if self.idx >= self.current_buffer.get().keys.len() {
             self.idx = 0;
             self.current_buffer_offset = self.current_buffer_offset.wrapping_add(1);
-            dbg!("{}", self.current_buffer_offset);
             self.current_buffer =
                 Buffer::read_from_file(self.file.clone(), self.current_buffer_offset).await?;
             // NOTE: it seems like cursors don't OOB when reading outside written bounds.

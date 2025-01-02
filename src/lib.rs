@@ -16,17 +16,17 @@ static BUFFER_OVERFLOW_BUFFER: usize = 5;
 
 // A basic LRU cache is used to speed up read / write operations to frequently
 // accessed chunks. It is sharded to lower thread contention.
-static BUFFER_POOL_SHARD_COUNT: usize = 10;
+static BUFFER_POOL_SHARD_COUNT: usize = 16;
 
 // The size (in chunks) of each cache shard before evicting the least
 // frequently used chunk. This effectively means socks can store a maximum of
 // BUFFER_POOL_SHARD_COUNT * BUFFER_POOL_SHARD_SIZE chunks in memory at any given time.
-static BUFFER_POOL_SHARD_SIZE: usize = 10;
+static BUFFER_POOL_SHARD_SIZE: usize = 16;
 
 // When searching through table B+ tree nodes using a binary search, this is the
 // number of remaining elements left until the algorithm switches to a sequential
 // search. This is better for cache coherence when sufficiently low.
-static BINARY_READ_ITER_CUTOFF: usize = 10;
+static BINARY_READ_ITER_CUTOFF: usize = 100;
 
 // Configurable read strategies for table B+ tree traversal.
 #[allow(dead_code)]

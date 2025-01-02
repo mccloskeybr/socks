@@ -25,8 +25,8 @@ async fn insert_leaf<F: Filelike>(
 
 // NOTE: Expects node to be non-full.
 async fn insert_internal<F: Filelike>(
-    table: &mut Table<F>,
-    buffer_pool: &mut BufferPool<F>,
+    table: &Table<F>,
+    buffer_pool: &BufferPool<F>,
     mut node_buffer: MutexGuard<'_, Buffer<F, NodeProto>>,
     key: u32,
     row: InternalRowProto,
@@ -48,7 +48,6 @@ async fn insert_internal<F: Filelike>(
                 )
                 .await?;
                 if node_buffer.get().internal().keys[idx] < key {
-                    // TODO: gross
                     drop(child_buffer);
                     child_mutex = right_child_mutex;
                     child_buffer = child_mutex.lock().await;
@@ -81,8 +80,8 @@ async fn insert_internal<F: Filelike>(
 }
 
 async fn split_child_leaf<F: Filelike>(
-    table: &mut Table<F>,
-    buffer_pool: &mut BufferPool<F>,
+    table: &Table<F>,
+    buffer_pool: &BufferPool<F>,
     parent: &mut Buffer<F, NodeProto>,
     child: &mut Buffer<F, NodeProto>,
     child_chunk_idx: usize,
@@ -95,7 +94,7 @@ async fn split_child_leaf<F: Filelike>(
 
     let split_idx = left_child.leaf().keys.len() / 2;
 
-    let right_child_mutex = buffer_pool.new_for_table(table).await?;
+    let right_child_mutex = buffer_pool.new_next_for_table(table).await?;
     let mut right_child_buffer = right_child_mutex.lock().await;
     let offset = right_child_buffer.offset;
     let right_child = right_child_buffer.get_mut();
@@ -118,8 +117,8 @@ async fn split_child_leaf<F: Filelike>(
 }
 
 async fn split_child_internal<F: Filelike>(
-    table: &mut Table<F>,
-    buffer_pool: &mut BufferPool<F>,
+    table: &Table<F>,
+    buffer_pool: &BufferPool<F>,
     parent: &mut Buffer<F, NodeProto>,
     child: &mut Buffer<F, NodeProto>,
     child_chunk_idx: usize,
@@ -132,7 +131,7 @@ async fn split_child_internal<F: Filelike>(
 
     let split_idx = left_child.internal().keys.len() / 2;
 
-    let right_child_mutex = buffer_pool.new_for_table(table).await?;
+    let right_child_mutex = buffer_pool.new_next_for_table(table).await?;
     let mut right_child_buffer = right_child_mutex.lock().await;
     let offset = right_child_buffer.offset;
     let right_child = right_child_buffer.get_mut();
@@ -142,10 +141,8 @@ async fn split_child_internal<F: Filelike>(
     right_child.mut_internal().child_offsets =
         left_child.mut_internal().child_offsets.split_off(split_idx);
 
-    parent.mut_internal().keys.insert(
-        child_chunk_idx,
-        left_child.internal().keys[left_child.internal().keys.len() - 1],
-    );
+    let key = left_child.internal().keys[left_child.internal().keys.len() - 1];
+    parent.mut_internal().keys.insert(child_chunk_idx, key);
     parent
         .mut_internal()
         .child_offsets
@@ -158,23 +155,21 @@ async fn split_child_internal<F: Filelike>(
 // NOTE: https://www.geeksforgeeks.org/insertion-in-a-b-tree/
 // TODO: ensure key doesn't already exist
 pub(crate) async fn insert<F: Filelike>(
-    table: &mut Table<F>,
-    buffer_pool: &mut BufferPool<F>,
+    table: &Table<F>,
+    buffer_pool: &BufferPool<F>,
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
     let root_node_mutex = buffer_pool
-        .read_from_table(table, table.metadata.root_chunk_offset)
+        .read_from_table(table, table.root_chunk_offset)
         .await?;
     let mut root_buffer = root_node_mutex.lock().await;
     debug_assert!(root_buffer.get().has_internal());
 
-    if root_buffer.get().internal().keys.len() + root_buffer.get().internal().child_offsets.len()
-        == 0
-    {
+    if root_buffer.get().internal().child_offsets.len() == 0 {
         log::trace!("Inserting first value.");
 
-        let child_mutex = buffer_pool.new_for_table(table).await?;
+        let child_mutex = buffer_pool.new_next_for_table(table).await?;
         let mut child_buffer = child_mutex.lock().await;
         let offset = child_buffer.offset;
         let child_node = child_buffer.get_mut();
@@ -196,7 +191,7 @@ pub(crate) async fn insert<F: Filelike>(
     if root_buffer.would_overflow(std::mem::size_of::<i32>()) {
         log::trace!("Root overflow detected.");
 
-        let child_mutex = buffer_pool.new_for_table(table).await?;
+        let child_mutex = buffer_pool.new_next_for_table(table).await?;
         let mut child_buffer = child_mutex.lock().await;
         let offset = child_buffer.offset;
         let child_node = child_buffer.get_mut();

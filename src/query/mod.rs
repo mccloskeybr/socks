@@ -9,10 +9,7 @@ mod reader;
 mod select;
 mod writer;
 
-pub async fn execute_query<F: Filelike>(
-    db: &mut Database<F>,
-    query: QueryProto,
-) -> Result<F, Error> {
+pub async fn execute_query<F: Filelike>(db: &Database<F>, query: QueryProto) -> Result<F, Error> {
     let output = match query.stage_type {
         Some(query_proto::Stage_type::Intersect(op)) => {
             Box::pin(intersect::execute_intersect(db, op)).await?

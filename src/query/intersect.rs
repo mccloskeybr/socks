@@ -7,7 +7,7 @@ use crate::query::{reader::ResultsReader, writer::ResultsWriter};
 use std::cmp::Ordering;
 
 pub(crate) async fn execute_intersect<F: Filelike>(
-    db: &mut Database<F>,
+    db: &Database<F>,
     intersect: IntersectProto,
 ) -> Result<F, Error> {
     let mut out = ResultsWriter::new(F::create("TODO").await?);

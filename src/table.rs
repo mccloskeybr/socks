@@ -12,6 +12,7 @@ use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
 use crate::schema;
 use protobuf::MessageField;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -22,25 +23,35 @@ use tokio::sync::Mutex;
 
 pub(crate) struct Table<F: Filelike> {
     pub(crate) file: Arc<Mutex<F>>,
-    pub(crate) metadata: TableMetadataProto,
+    pub(crate) name: String,
+    pub(crate) id: u32,
+    pub(crate) schema: TableSchema,
+    pub(crate) root_chunk_offset: u32,
+    pub(crate) next_chunk_offset: AtomicU32,
 }
 
+unsafe impl<F: Filelike> Send for Table<F> {}
+unsafe impl<F: Filelike> Sync for Table<F> {}
+
 impl<F: Filelike> Table<F> {
-    pub(crate) fn next_chunk_offset(&mut self) -> u32 {
-        let offset = self.metadata.next_chunk_offset;
-        self.metadata.next_chunk_offset += 1;
-        log::trace!("next_chunk_offset {} <<<<<<<<<<<<<<<<<<<<<<<<<", offset);
-        offset
+    pub(crate) fn next_chunk_offset(&self) -> u32 {
+        self.next_chunk_offset.fetch_add(1, Ordering::Relaxed)
     }
 
     pub(crate) fn is_table_keyed_on_column(&self, col_name: &str) -> bool {
-        &self.metadata.schema.key.name == col_name
+        &self.schema.key.name == col_name
     }
 
-    pub(crate) async fn commit_metadata(&mut self) -> Result<(), Error> {
+    pub(crate) async fn commit_metadata(&self) -> Result<(), Error> {
         log::trace!("Committing metadata.");
-        Buffer::new_for_file(self.file.clone(), 0, self.metadata.clone())
-            .write_to_table()
+        let mut metadata = TableMetadataProto::new();
+        metadata.name = self.name.clone();
+        metadata.id = self.id;
+        metadata.schema = MessageField::some(self.schema.clone());
+        metadata.root_chunk_offset = self.root_chunk_offset;
+        metadata.next_chunk_offset = self.next_chunk_offset.load(Ordering::Relaxed);
+        Buffer::new_for_file(self.file.clone(), 0, metadata)
+            .write_to_file()
             .await?;
         Ok(())
     }
@@ -52,32 +63,38 @@ impl<F: Filelike> Table<F> {
         schema: TableSchema,
     ) -> Result<Self, Error> {
         let file = Arc::new(Mutex::new(file));
-        let mut metadata = TableMetadataProto::new();
-        metadata.name = name;
-        metadata.id = id;
-        metadata.schema = MessageField::some(schema);
-        metadata.root_chunk_offset = 1;
-        metadata.next_chunk_offset = 2;
-        Buffer::new_for_file(file.clone(), 0, metadata.clone())
-            .write_to_table()
-            .await?;
-
-        let mut root_node = NodeProto::new();
-        root_node.offset = 1;
-        root_node.set_internal(InternalNodeProto::new());
-        Buffer::new_for_file(file.clone(), 1, root_node)
-            .write_to_table()
-            .await?;
-
+        {
+            let mut metadata = TableMetadataProto::new();
+            metadata.name = name.clone();
+            metadata.id = id;
+            metadata.schema = MessageField::some(schema.clone());
+            metadata.root_chunk_offset = 1;
+            metadata.next_chunk_offset = 2;
+            Buffer::new_for_file(file.clone(), 0, metadata.clone())
+                .write_to_file()
+                .await?;
+        }
+        {
+            let mut root_node = NodeProto::new();
+            root_node.offset = 1;
+            root_node.set_internal(InternalNodeProto::new());
+            Buffer::new_for_file(file.clone(), 1, root_node)
+                .write_to_file()
+                .await?;
+        }
         Ok(Self {
             file: file,
-            metadata: metadata,
+            name: name,
+            id: id,
+            schema: schema,
+            root_chunk_offset: 1,
+            next_chunk_offset: AtomicU32::new(2),
         })
     }
 
     pub(crate) async fn insert(
-        &mut self,
-        buffer_pool: &mut BufferPool<F>,
+        &self,
+        buffer_pool: &BufferPool<F>,
         key: u32,
         row: InternalRowProto,
     ) -> Result<(), Error> {
@@ -86,16 +103,13 @@ impl<F: Filelike> Table<F> {
     }
 
     pub(crate) async fn read_row(
-        &mut self,
-        buffer_pool: &mut BufferPool<F>,
+        &self,
+        buffer_pool: &BufferPool<F>,
         key: u32,
     ) -> Result<RowProto, Error> {
         log::trace!("Retrieving row with key: {key}");
         let internal_row =
-            bp_tree::read_row(self, buffer_pool, self.metadata.root_chunk_offset, key).await?;
-        Ok(schema::internal_row_to_row(
-            &internal_row,
-            &self.metadata.schema,
-        ))
+            bp_tree::read_row(self, buffer_pool, self.root_chunk_offset, key).await?;
+        Ok(schema::internal_row_to_row(&internal_row, &self.schema))
     }
 }

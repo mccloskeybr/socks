@@ -13,7 +13,7 @@ use tokio::io::{AsyncRead, AsyncSeek, AsyncWrite};
 // facilitate that behavior.
 
 #[allow(async_fn_in_trait)]
-pub trait Filelike: Debug + Unpin + AsyncRead + AsyncWrite + AsyncSeek + Sized {
+pub trait Filelike: Debug + Unpin + Send + AsyncRead + AsyncWrite + AsyncSeek + Sized {
     async fn create(path: &str) -> Result<Self, Error>;
 }
 
@@ -30,7 +30,7 @@ impl Filelike for File {
 
 impl<T: Default> Filelike for Cursor<T>
 where
-    Cursor<T>: Debug + Unpin + AsyncRead + AsyncWrite + AsyncSeek,
+    Cursor<T>: Debug + Unpin + Send + AsyncRead + AsyncWrite + AsyncSeek,
 {
     async fn create(_path: &str) -> Result<Self, Error> {
         Ok(Cursor::<T>::new(T::default()))

@@ -41,8 +41,8 @@ pub(crate) fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
 
 // finds the row with the associated key, else returns NotFound.
 pub(crate) async fn read_row<F: Filelike>(
-    table: &mut Table<F>,
-    buffer_pool: &mut BufferPool<F>,
+    table: &Table<F>,
+    buffer_pool: &BufferPool<F>,
     curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
@@ -68,8 +68,8 @@ pub(crate) async fn read_row<F: Filelike>(
 
 // inserts the row with the associated key into the table.
 pub(crate) async fn insert<F: Filelike>(
-    table: &mut Table<F>,
-    buffer_pool: &mut BufferPool<F>,
+    table: &Table<F>,
+    buffer_pool: &BufferPool<F>,
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {

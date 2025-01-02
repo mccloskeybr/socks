@@ -30,7 +30,7 @@ impl<F: Filelike> ResultsWriter<F> {
             .would_overflow(std::mem::size_of::<u32>())
         {
             let file = self.current_buffer.file.clone();
-            self.current_buffer.write_to_table().await?;
+            self.current_buffer.write_to_file().await?;
             self.current_buffer_offset += 1;
             self.current_buffer = Buffer::new_for_file(
                 file,
@@ -48,7 +48,7 @@ impl<F: Filelike> ResultsWriter<F> {
             .would_overflow(row.compute_size() as usize + std::mem::size_of::<u32>())
         {
             let file = self.current_buffer.file.clone();
-            self.current_buffer.write_to_table().await?;
+            self.current_buffer.write_to_file().await?;
             self.current_buffer_offset += 1;
             self.current_buffer = Buffer::new_for_file(
                 file,
@@ -62,7 +62,7 @@ impl<F: Filelike> ResultsWriter<F> {
     }
 
     pub(crate) async fn finish(mut self) -> Result<F, Error> {
-        self.current_buffer.write_to_table().await?;
+        self.current_buffer.write_to_file().await?;
         Ok(Arc::into_inner(self.current_buffer.file)
             .unwrap()
             .into_inner())

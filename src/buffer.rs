@@ -84,8 +84,7 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         }
     }
 
-    // TODO: s/new/new_table_next (or something)
-    pub(crate) async fn new_for_table(table: &mut Table<F>) -> Self {
+    pub(crate) async fn new_next_for_table(table: &Table<F>) -> Self {
         Self::new_for_file(table.file.clone(), table.next_chunk_offset(), M::new())
     }
 
@@ -107,13 +106,12 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         })
     }
 
-    pub(crate) async fn read_from_table(table: &mut Table<F>, offset: u32) -> Result<Self, Error> {
+    pub(crate) async fn read_from_table(table: &Table<F>, offset: u32) -> Result<Self, Error> {
         let file = table.file.clone();
         Self::read_from_file(file, offset).await
     }
 
-    // TODO: s/table/file
-    pub(crate) async fn write_to_table(&mut self) -> Result<(), Error> {
+    pub(crate) async fn write_to_file(&mut self) -> Result<(), Error> {
         assert!(!self.would_overflow(0));
         let bytes: [u8; BUFFER_SIZE] = Self::message_to_bytes(&self.data)?;
         {
@@ -124,7 +122,6 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
             file_lock.write(&bytes).await?;
             file_lock.flush().await?;
         }
-        log::trace!("wrote to offset: {}", self.offset);
         Ok(())
     }
 

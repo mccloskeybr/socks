@@ -43,6 +43,8 @@ impl<F: Filelike> Drop for CacheEntryBox<F> {
 #[derive(Debug)]
 struct CacheEntryPtr<F: Filelike>(*mut CacheEntry<F>);
 
+unsafe impl<F: Filelike> Send for CacheEntryPtr<F> {}
+
 impl<F: Filelike> Deref for CacheEntryPtr<F> {
     type Target = CacheEntry<F>;
     fn deref(&self) -> &Self::Target {
@@ -68,9 +70,10 @@ struct Cache<F: Filelike> {
     map: HashMap<(u32, u32), CacheEntryBox<F>>,
 }
 
+unsafe impl<F: Filelike> Send for Cache<F> {}
+
 impl<F: Filelike> Cache<F> {
     fn new() -> Self {
-        // NOTE: sentinel is never accessed directly.
         let sentinel = CacheEntryBox::new(CacheEntry {
             data: OnceCell::new(),
             table_id: 0,
@@ -91,7 +94,6 @@ impl<F: Filelike> Cache<F> {
         let mut lru = self.sentinel.as_ptr().left.clone();
         debug_assert!(lru.0 != self.sentinel.as_ptr().0);
         let lru = lru.deref_mut();
-        dbg!(&lru);
         lru.left.right = lru.right.clone();
         lru.right.left = lru.left.clone();
 
@@ -99,7 +101,7 @@ impl<F: Filelike> Cache<F> {
         // this lock succeeds we know there are no outstanding threads using it.
         let mut buffer = lru.data.get_mut().unwrap().lock().await;
         if buffer.is_dirty {
-            buffer.write_to_table().await?;
+            buffer.write_to_file().await?;
         }
 
         self.map.remove(&(lru.table_id, lru.offset));
@@ -107,14 +109,11 @@ impl<F: Filelike> Cache<F> {
         Ok(())
     }
 
-    #[cfg(test)]
-    async fn flush(&mut self) -> Result<(), Error> {
-        log::trace!("flush shard {}", self.map.len());
-        while self.map.len() > 0 {
-            log::trace!("flush elem");
-            self.evict().await?;
-        }
-        Ok(())
+    fn promote(&mut self, entry_ptr: &mut CacheEntryPtr<F>) {
+        entry_ptr.left = self.sentinel.as_ptr().clone();
+        entry_ptr.right = self.sentinel.as_ptr().right.clone();
+        entry_ptr.left.right = entry_ptr.clone();
+        entry_ptr.right.left = entry_ptr.clone();
     }
 
     async fn insert(
@@ -123,16 +122,12 @@ impl<F: Filelike> Cache<F> {
         offset: u32,
         buffer: Buffer<F, NodeProto>,
     ) -> Result<Arc<Mutex<Buffer<F, NodeProto>>>, Error> {
-        log::trace!("inserting");
         debug_assert!(self.get(table_id, offset).await.is_none());
         if self.map.len() >= BUFFER_POOL_SHARD_SIZE {
-            log::trace!("evicting");
             self.evict().await?;
         }
-        let data = OnceCell::new();
-        data.set(Arc::new(Mutex::new(buffer))).unwrap();
         let entry_box = CacheEntryBox::new(CacheEntry {
-            data: data,
+            data: OnceCell::from(Arc::new(Mutex::new(buffer))),
             table_id: table_id,
             offset: offset,
             left: CacheEntryPtr(std::ptr::null_mut()),
@@ -140,11 +135,7 @@ impl<F: Filelike> Cache<F> {
         });
         let mut entry_ptr = entry_box.as_ptr();
         self.map.insert((table_id, offset), entry_box);
-        log::trace!("items in map: {}", self.map.len());
-        entry_ptr.left = self.sentinel.as_ptr().clone();
-        entry_ptr.right = self.sentinel.as_ptr().right.clone();
-        entry_ptr.left.right = entry_ptr.clone();
-        entry_ptr.right.left = entry_ptr.clone();
+        self.promote(&mut entry_ptr);
         Ok(entry_ptr.deref().data.get().unwrap().clone())
     }
 
@@ -153,30 +144,35 @@ impl<F: Filelike> Cache<F> {
         table_id: u32,
         offset: u32,
     ) -> Option<Arc<Mutex<Buffer<F, NodeProto>>>> {
-        log::trace!("retrieving...");
         match self.map.get(&(table_id, offset)) {
             Some(entry_box) => {
-                log::trace!("found!");
                 let mut entry_ptr = entry_box.as_ptr();
                 entry_ptr.left.right = entry_ptr.right.clone();
                 entry_ptr.right.left = entry_ptr.left.clone();
-                entry_ptr.left = self.sentinel.as_ptr().clone();
-                entry_ptr.right = self.sentinel.as_ptr().right.clone();
-                entry_ptr.left.right = entry_ptr.clone();
-                entry_ptr.right.left = entry_ptr.clone();
+                self.promote(&mut entry_ptr);
                 return Some(entry_ptr.data.get().unwrap().clone());
             }
             None => {
-                log::trace!("not found!");
                 return None;
             }
         }
+    }
+
+    #[cfg(test)]
+    async fn flush(&mut self) -> Result<(), Error> {
+        while self.map.len() > 0 {
+            self.evict().await?;
+        }
+        Ok(())
     }
 }
 
 pub(crate) struct BufferPool<F: Filelike> {
     shards: Vec<Mutex<Cache<F>>>,
 }
+
+unsafe impl<F: Filelike> Send for BufferPool<F> {}
+unsafe impl<F: Filelike> Sync for BufferPool<F> {}
 
 impl<F: Filelike> BufferPool<F> {
     fn shard_idx(offset: u32) -> usize {
@@ -191,38 +187,33 @@ impl<F: Filelike> BufferPool<F> {
         Self { shards: shards }
     }
 
-    pub(crate) async fn new_for_table(
-        &mut self,
-        table: &mut Table<F>,
+    pub(crate) async fn new_next_for_table(
+        &self,
+        table: &Table<F>,
     ) -> Result<Arc<Mutex<Buffer<F, NodeProto>>>, Error> {
-        let buffer = Buffer::new_for_table(table).await;
-        log::trace!("new_for_table {}", buffer.offset);
-        let shard = &mut *self.shards[Self::shard_idx(buffer.offset)].lock().await;
-        shard.insert(table.metadata.id, buffer.offset, buffer).await
+        let buffer = Buffer::new_next_for_table(table).await;
+        let mut shard = self.shards[Self::shard_idx(buffer.offset)].lock().await;
+        shard.insert(table.id, buffer.offset, buffer).await
     }
 
     pub(crate) async fn read_from_table(
-        &mut self,
-        table: &mut Table<F>,
+        &self,
+        table: &Table<F>,
         offset: u32,
     ) -> Result<Arc<Mutex<Buffer<F, NodeProto>>>, Error> {
-        log::trace!("read_from_table: {}", offset);
-        let shard = &mut *self.shards[Self::shard_idx(offset)].lock().await;
-        match shard.get(table.metadata.id, offset).await {
+        let mut shard = self.shards[Self::shard_idx(offset)].lock().await;
+        match shard.get(table.id, offset).await {
             Some(buffer) => return Ok(buffer),
             None => {
                 let buffer = Buffer::read_from_table(table, offset).await?;
-                return Ok(shard
-                    .insert(table.metadata.id, buffer.offset, buffer)
-                    .await?);
+                return Ok(shard.insert(table.id, buffer.offset, buffer).await?);
             }
         }
     }
 
     #[cfg(test)]
-    pub(crate) async fn flush(&mut self) -> Result<(), Error> {
-        log::trace!("flush pool");
-        for shard in &mut self.shards {
+    pub(crate) async fn flush(&self) -> Result<(), Error> {
+        for shard in &self.shards {
             let mut shard = shard.lock().await;
             shard.flush().await?;
         }

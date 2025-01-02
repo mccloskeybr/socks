@@ -47,7 +47,7 @@ fn setup() -> TestContext {
 #[tokio::test]
 async fn insert_single_success() -> Result<(), Error> {
     let context = setup();
-    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
+    let db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -72,26 +72,19 @@ async fn insert_single_success() -> Result<(), Error> {
     // row in primary index
     {
         let expected_table_row_internal = insert_operation.row.clone().unwrap();
-        let table_row_internal = db
-            .table
-            .borrow_mut()
-            .read_row(&mut db.buffer_pool, 1)
-            .await?;
+        let table_row_internal = db.table.read_row(&db.buffer_pool, 1).await?;
         assert_eq!(expected_table_row_internal, table_row_internal);
     }
     // row in secondary index
     {
-        let secondary_index = &mut db.secondary_indexes[0];
+        let secondary_index = &db.secondary_indexes[0];
         let index_row = schema::table_row_to_index_row(
             &insert_operation.row,
-            &secondary_index.borrow().metadata.schema.as_ref().unwrap(),
-            &db.table.borrow().metadata.schema.as_ref().unwrap(),
+            &secondary_index.schema,
+            &db.table.schema,
         );
         let expected_index_row_internal = index_row;
-        let index_row_internal = secondary_index
-            .borrow_mut()
-            .read_row(&mut db.buffer_pool, 2)
-            .await?;
+        let index_row_internal = secondary_index.read_row(&db.buffer_pool, 2).await?;
         assert_eq!(expected_index_row_internal, index_row_internal);
     }
 
@@ -101,7 +94,7 @@ async fn insert_single_success() -> Result<(), Error> {
 #[tokio::test]
 async fn read_single_success() -> Result<(), Error> {
     let context = setup();
-    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
+    let db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -143,7 +136,7 @@ async fn read_single_success() -> Result<(), Error> {
 #[tokio::test]
 async fn query_success() -> Result<(), Error> {
     let context = setup();
-    let mut db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
+    let db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
 
     for i in 0..50 {
         let mut key = ColumnProto::new();
@@ -202,6 +195,87 @@ async fn query_success() -> Result<(), Error> {
         ",
     )?;
     assert_eq!(query_results.data, expected_query_results);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn async_read_write_success() -> Result<(), Error> {
+    let context = setup();
+    let db: Arc<Database<Cursor<Vec<u8>>>> = Arc::new(Database::create("", context.schema).await?);
+    let num_iter = 100;
+
+    let mut task_set = tokio::task::JoinSet::new();
+    for i in 0..num_iter {
+        let db = db.clone();
+        task_set.spawn(async move {
+            let insert_operation = parse_from_str::<InsertProto>(
+                format!(
+                    "
+                row {{
+                    columns {{
+                        name: \"Key\"
+                        value {{
+                            int_value: {i}
+                        }}
+                    }}
+                    columns {{
+                        name: \"Value\"
+                        value {{
+                            int_value: {i}
+                        }}
+                    }}
+                }}
+                ",
+                )
+                .as_str(),
+            )
+            .unwrap();
+            db.insert(insert_operation.clone()).await.unwrap();
+        });
+    }
+
+    for i in 0..num_iter {
+        let db = db.clone();
+        tokio::spawn(async move {
+            let read_operation = parse_from_str::<ReadRowProto>(
+                format!(
+                    "
+                column {{
+                    name: \"Key\"
+                    value {{
+                        int_value: {i}
+                    }}
+                }}
+                ",
+                )
+                .as_str(),
+            )
+            .unwrap();
+            let expected_row = parse_from_str::<RowProto>(
+                format!(
+                    "
+                    columns {{
+                        name: \"Key\"
+                        value {{
+                            int_value: {i}
+                        }}
+                    }}
+                    columns {{
+                        name: \"Value\"
+                        value {{
+                            int_value: {i}
+                        }}
+                    }}
+                ",
+                )
+                .as_str(),
+            )
+            .unwrap();
+            let row = db.read_row(read_operation).await.unwrap();
+            assert_eq!(expected_row, row);
+        });
+    }
 
     Ok(())
 }
