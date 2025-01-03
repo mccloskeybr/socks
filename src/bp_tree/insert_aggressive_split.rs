@@ -10,12 +10,12 @@ use tokio::sync::{RwLock, RwLockWriteGuard};
 
 // NOTE: Expects node to be non-full.
 async fn insert_leaf<F: Filelike>(
-    node: &mut Buffer<F, NodeProto>,
+    node_buffer: &mut Buffer<F, NodeProto>,
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
-    debug_assert!(node.get().has_leaf());
-    let leaf: &mut LeafNodeProto = node.get_mut().mut_leaf();
+    debug_assert!(node_buffer.get().has_leaf());
+    let leaf: &mut LeafNodeProto = node_buffer.get_mut().mut_leaf();
     let idx = bp_tree::find_row_idx_for_key(leaf, key);
     leaf.keys.insert(idx, key);
     leaf.rows.insert(idx, row);

@@ -1,5 +1,5 @@
 use crate::buffer::Buffer;
-use crate::error::*;
+use crate::error::{ErrorKind::*, *};
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
 use std::sync::Arc;
@@ -34,7 +34,7 @@ impl<F: Filelike> ResultsReader<F> {
                 Buffer::read_from_file(self.file.clone(), self.current_buffer_offset).await?;
             // NOTE: it seems like cursors don't OOB when reading outside written bounds.
             if self.current_buffer.get().keys.len() == 0 {
-                return Err(Error::OutOfBounds("".to_string()));
+                return Err(Error::new(OutOfBounds, "".to_string()));
             }
         }
         Ok(self.current_buffer.get().keys[self.idx])

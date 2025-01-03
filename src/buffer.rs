@@ -2,7 +2,7 @@
 #[path = "./buffer_test.rs"]
 mod test;
 
-use crate::error::*;
+use crate::error::{ErrorKind::*, *};
 use crate::filelike::Filelike;
 use crate::table::Table;
 use crate::{BUFFER_OVERFLOW_BUFFER, BUFFER_SIZE};
@@ -36,14 +36,14 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         cursor: &mut usize,
     ) -> Result<(), Error> {
         let Some(slice) = dest.get_mut(*cursor..*cursor + src.len()) else {
-            return Err(Error::OutOfBounds(
+            return Err(Error::new(
+                OutOfBounds,
                 format!(
                     "Source data of size: {} cannot fit in dest buffer of size {} at pos {}!",
                     src.len(),
                     dest.len(),
                     cursor
-                )
-                .into(),
+                ),
             ));
         };
         slice.copy_from_slice(src);
@@ -55,7 +55,7 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
     fn message_to_bytes(msg: &M) -> Result<[u8; BUFFER_SIZE], Error> {
         let data: Vec<u8> = msg
             .write_to_bytes()
-            .map_err(|e| Error::DataLoss(format!("Unable to convert buffer to bytes: {e}")))?;
+            .map_err(|e| Error::new(DataLoss, format!("Unable to convert buffer to bytes: {e}")))?;
         let data_len: u16 = data.len().try_into().unwrap();
         let mut bytes = [0; BUFFER_SIZE];
         let mut cursor: usize = 0;
@@ -68,7 +68,8 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
     // Intended to consume a byte array / transform into a known structure.
     fn read_slice<'a>(src: &'a [u8], size: usize, cursor: &mut usize) -> Result<&'a [u8], Error> {
         let Some(slice) = src.get(*cursor..*cursor + size) else {
-            return Err(Error::OutOfBounds(
+            return Err(Error::new(
+                OutOfBounds,
                 format!("Requested size is too large for buffer!: {}", size).into(),
             ));
         };
@@ -82,8 +83,12 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         let slice = Self::read_slice(bytes, std::mem::size_of::<u16>(), &mut cursor)?;
         let buffer_size = u16::from_be_bytes(slice.try_into().unwrap());
         let slice = Self::read_slice(bytes, buffer_size as usize, &mut cursor)?;
-        let msg = M::parse_from_bytes(&slice)
-            .map_err(|e| Error::DataLoss(format!("Unable to interpret buffer from bytes: {e}")))?;
+        let msg = M::parse_from_bytes(&slice).map_err(|e| {
+            Error::new(
+                DataLoss,
+                format!("Unable to interpret buffer from bytes: {e}"),
+            )
+        })?;
         Ok(msg)
     }
 
@@ -110,10 +115,12 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
             let mut file = file.lock().await;
             file.seek(SeekFrom::Start(offset as u64 * BUFFER_SIZE as u64))
                 .await
-                .map_err(|e| Error::Internal(format!("Unable to seek file for read call: {e}")))?;
+                .map_err(|e| {
+                    Error::new(Internal, format!("Unable to seek file for read call: {e}"))
+                })?;
             file.read(&mut bytes)
                 .await
-                .map_err(|e| Error::Internal(format!("Unable to read file: {e}")))?;
+                .map_err(|e| Error::new(Internal, format!("Unable to read file: {e}")))?;
         }
         Ok(Self {
             file: file,
@@ -140,13 +147,15 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
             let mut file = self.file.lock().await;
             file.seek(SeekFrom::Start(self.offset as u64 * BUFFER_SIZE as u64))
                 .await
-                .map_err(|e| Error::Internal(format!("Unable to seek file for write call: {e}")))?;
+                .map_err(|e| {
+                    Error::new(Internal, format!("Unable to seek file for write call: {e}"))
+                })?;
             file.write(&bytes)
                 .await
-                .map_err(|e| Error::Internal(format!("Unable to write to file: {e}")))?;
+                .map_err(|e| Error::new(Internal, format!("Unable to write to file: {e}")))?;
             file.flush()
                 .await
-                .map_err(|e| Error::Internal(format!("Unable to flush file: {e}")))?;
+                .map_err(|e| Error::new(Internal, format!("Unable to flush file: {e}")))?;
         }
         Ok(())
     }

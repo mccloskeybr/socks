@@ -1,6 +1,6 @@
 use crate::buffer::Buffer;
 use crate::database::Database;
-use crate::error::*;
+use crate::error::{Error, ErrorKind::*};
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
@@ -121,7 +121,7 @@ async fn read_single_success() -> Result<(), Error> {
 
     let read_operation = parse_from_str::<ReadRowProto>(
         "
-        column {
+        key {
             name: \"Key\"
             value {
                 int_value: 1
@@ -247,7 +247,7 @@ async fn async_read_write_success() -> Result<(), Error> {
             let read_operation = parse_from_str::<ReadRowProto>(
                 format!(
                     "
-                column {{
+                key {{
                     name: \"Key\"
                     value {{
                         int_value: {i}
@@ -282,6 +282,54 @@ async fn async_read_write_success() -> Result<(), Error> {
             assert_eq!(expected_row, row);
         });
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn delete_single_success() -> Result<(), Error> {
+    let ctx = setup().await;
+    let db = ctx.db;
+
+    let insert_operation = parse_from_str::<InsertProto>(
+        "
+        row {
+            columns {
+                name: \"Key\"
+                value {
+                    int_value: 1
+                }
+            }
+            columns {
+                name: \"Value\"
+                value {
+                    int_value: 2
+                }
+            }
+        }
+        ",
+    )
+    .unwrap();
+    db.insert(insert_operation.clone()).await?;
+
+    let delete_operation = parse_from_str::<DeleteProto>(
+        "
+        key {
+        name: \"Key\"
+        value {
+        int_value: 1
+        }
+        }
+        ",
+    )
+    .unwrap();
+    db.delete(delete_operation.clone()).await?;
+
+    let table_row_internal = db.table.read_row(1).await;
+    assert_eq!(table_row_internal.unwrap_err().kind, NotFound);
+
+    let index_row_internal = db.secondary_indexes[0].read_row(2).await;
+    assert_eq!(index_row_internal.unwrap_err().kind, NotFound);
 
     Ok(())
 }

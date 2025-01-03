@@ -1,4 +1,4 @@
-use crate::error::*;
+use crate::error::{ErrorKind::*, *};
 use crate::protos::generated::chunk::*;
 use crate::{BINARY_READ_ITER_CUTOFF, LANE_WIDTH};
 use std::simd::cmp::SimdPartialOrd;
@@ -74,10 +74,16 @@ pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Res
         return Ok(internal.child_offsets.len() - 1);
     }
 
-    Err(Error::NotFound(format!("Row with key {} not found!", key)))
+    Err(Error::new(
+        NotFound,
+        format!("Row with key {} not found!", key),
+    ))
 }
 
 pub fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
+    if leaf.keys.is_empty() {
+        return 0;
+    }
     let keys = Simd::<u32, LANE_WIDTH>::splat(key);
 
     let mut lower: usize = 0;

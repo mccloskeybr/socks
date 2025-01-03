@@ -97,6 +97,11 @@ impl<F: Filelike> Table<F> {
         bp_tree::insert(self, key, row).await
     }
 
+    pub(crate) async fn delete(&self, key: u32) -> Result<InternalRowProto, Error> {
+        log::trace!("Deleting row with key {key}");
+        bp_tree::delete(self, key).await
+    }
+
     pub(crate) async fn read_row(&self, key: u32) -> Result<RowProto, Error> {
         log::trace!("Retrieving row with key: {key}");
         let internal_row = bp_tree::read_row(self, self.root_chunk_offset, key).await?;

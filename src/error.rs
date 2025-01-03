@@ -1,27 +1,49 @@
 #[derive(Debug)]
-pub enum Error {
-    InvalidArgument(String),
-    FailedPrecondition(String),
-    NotFound(String),
-    OutOfBounds(String),
-    AlreadyExists(String),
-    Internal(String),
-    DataLoss(String),
+pub struct Error {
+    pub kind: ErrorKind,
+    pub msg: String,
 }
 
 unsafe impl Send for Error {}
 impl std::error::Error for Error {}
 
+impl Error {
+    pub fn new(kind: ErrorKind, msg: String) -> Self {
+        Self {
+            kind: kind,
+            msg: msg,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum ErrorKind {
+    InvalidArgument,
+    FailedPrecondition,
+    NotFound,
+    OutOfBounds,
+    AlreadyExists,
+    Internal,
+    DataLoss,
+}
+
+impl ErrorKind {
+    pub fn as_str(&self) -> &'static str {
+        use ErrorKind::*;
+        match *self {
+            InvalidArgument => "INVALID_ARGUMENT",
+            FailedPrecondition => "FAILED_PRECONDITION",
+            NotFound => "NOT_FOUND",
+            OutOfBounds => "OUT_OF_BOUNDS",
+            AlreadyExists => "ALREADY_EXISTS",
+            Internal => "INTERNAL",
+            DataLoss => "DATA_LOSS",
+        }
+    }
+}
+
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::InvalidArgument(s) => write!(f, "{}", s),
-            Error::FailedPrecondition(s) => write!(f, "{}", s),
-            Error::NotFound(s) => write!(f, "{}", s),
-            Error::OutOfBounds(s) => write!(f, "{}", s),
-            Error::AlreadyExists(s) => write!(f, "{}", s),
-            Error::Internal(s) => write!(f, "{}", s),
-            Error::DataLoss(s) => write!(f, "{}", s),
-        }
+        write!(f, "{}: {}", self.kind.as_str(), self.msg)
     }
 }

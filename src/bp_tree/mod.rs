@@ -1,12 +1,16 @@
-use crate::error::*;
+use crate::error::{Error, ErrorKind::*};
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
-use crate::table::*;
-use crate::{ReadStrategy::*, WriteStrategy::*, READ_STRATEGY, WRITE_STRATEGY};
+use crate::table::Table;
+use crate::{
+    DeleteStrategy::*, ReadStrategy::*, WriteStrategy::*, DELETE_STRATEGY, READ_STRATEGY,
+    WRITE_STRATEGY,
+};
 
 mod insert_aggressive_split;
 mod read_binary_search;
 mod read_sequential;
+mod unbalanced_delete;
 
 // find what table of the current internal node's child nodes should be traversed
 // next in order to find the row with the given key.
@@ -15,12 +19,8 @@ pub(crate) fn find_next_node_idx_for_key(
     key: u32,
 ) -> Result<usize, Error> {
     match READ_STRATEGY {
-        SequentialSearch => {
-            return read_sequential::find_next_node_idx_for_key(internal, key);
-        }
-        BinarySearch => {
-            return read_binary_search::find_next_node_idx_for_key(internal, key);
-        }
+        SequentialSearch => return read_sequential::find_next_node_idx_for_key(internal, key),
+        BinarySearch => return read_binary_search::find_next_node_idx_for_key(internal, key),
     }
 }
 
@@ -29,12 +29,29 @@ pub(crate) fn find_next_node_idx_for_key(
 // for write calls, this returns where the row should be inserted into the leaf.
 pub(crate) fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
     match READ_STRATEGY {
-        SequentialSearch => {
-            return read_sequential::find_row_idx_for_key(leaf, key);
-        }
-        BinarySearch => {
-            return read_binary_search::find_row_idx_for_key(leaf, key);
-        }
+        SequentialSearch => read_sequential::find_row_idx_for_key(leaf, key),
+        BinarySearch => read_binary_search::find_row_idx_for_key(leaf, key),
+    }
+}
+
+// inserts the row with the associated key into the table.
+pub(crate) async fn insert<F: Filelike>(
+    table: &Table<F>,
+    key: u32,
+    row: InternalRowProto,
+) -> Result<(), Error> {
+    match WRITE_STRATEGY {
+        AggressiveSplit => insert_aggressive_split::insert::<F>(table, key, row).await,
+    }
+}
+
+// Deletes the row with the given key, and returns it.
+pub(crate) async fn delete<F: Filelike>(
+    table: &Table<F>,
+    key: u32,
+) -> Result<InternalRowProto, Error> {
+    match DELETE_STRATEGY {
+        UnbalancedDelete => unbalanced_delete::delete(table, table.root_chunk_offset, key).await,
     }
 }
 
@@ -59,23 +76,13 @@ pub(crate) async fn read_row<F: Filelike>(
         Some(node_proto::Node_type::Leaf(leaf)) => {
             let idx = find_row_idx_for_key(&leaf, key);
             if leaf.rows.len() <= idx || leaf.keys[idx] != key {
-                return Err(Error::NotFound(format!("Row with key {} not found!", key)));
+                return Err(Error::new(
+                    NotFound,
+                    format!("Row with key {} not found!", key),
+                ));
             }
             return Ok(leaf.rows[idx].clone());
         }
         None => panic!(),
-    }
-}
-
-// inserts the row with the associated key into the table.
-pub(crate) async fn insert<F: Filelike>(
-    table: &Table<F>,
-    key: u32,
-    row: InternalRowProto,
-) -> Result<(), Error> {
-    match WRITE_STRATEGY {
-        AggressiveSplit => {
-            return insert_aggressive_split::insert::<F>(table, key, row).await;
-        }
     }
 }

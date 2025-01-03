@@ -3,7 +3,7 @@
 mod test;
 
 use crate::buffer_pool::BufferPool;
-use crate::error::*;
+use crate::error::{ErrorKind::*, *};
 use crate::filelike::Filelike;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
@@ -30,10 +30,10 @@ impl<F: Filelike> Database<F> {
                 return Ok(secondary_index.clone());
             }
         }
-        return Err(Error::NotFound(format!(
-            "Column not indexed: {}!",
-            col_name
-        )));
+        return Err(Error::new(
+            NotFound,
+            format!("Column not indexed: {}!", col_name),
+        ));
     }
 
     // TODO: validate dir doesn't exist, schema.
@@ -106,8 +106,23 @@ impl<F: Filelike> Database<F> {
         Ok(())
     }
 
+    pub async fn delete(&self, op: DeleteProto) -> Result<(), Error> {
+        let hashed_key = schema::get_hashed_col_value(&op.key.value);
+        let internal_row = self.table.delete(hashed_key).await?;
+        let row = schema::internal_row_to_row(&internal_row, &self.table.schema);
+
+        for secondary_index in &self.secondary_indexes {
+            let index_row =
+                schema::table_row_to_index_row(&row, &secondary_index.schema, &self.table.schema);
+            let index_key = schema::get_hashed_key_from_row(&index_row, &secondary_index.schema);
+            secondary_index.delete(index_key).await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn read_row(&self, op: ReadRowProto) -> Result<RowProto, Error> {
-        let hashed_key = schema::get_hashed_col_value(&op.column.value);
+        let hashed_key = schema::get_hashed_col_value(&op.key.value);
         self.table.read_row(hashed_key).await
     }
 

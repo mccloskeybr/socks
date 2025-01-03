@@ -1,4 +1,4 @@
-use crate::error::*;
+use crate::error::{ErrorKind::*, *};
 use crate::protos::generated::chunk::*;
 use crate::LANE_WIDTH;
 use std::simd::cmp::SimdPartialOrd;
@@ -26,7 +26,10 @@ pub fn find_next_node_idx_for_key(internal: &InternalNodeProto, key: u32) -> Res
         return Ok(internal.child_offsets.len() - 1);
     }
 
-    Err(Error::NotFound(format!("Row with key {} not found!", key)))
+    Err(Error::new(
+        NotFound,
+        format!("Row with key {key} not found!"),
+    ))
 }
 
 pub fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {

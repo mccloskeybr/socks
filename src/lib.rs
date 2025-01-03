@@ -43,6 +43,17 @@ enum WriteStrategy {
 }
 static WRITE_STRATEGY: WriteStrategy = WriteStrategy::AggressiveSplit;
 
+// Configurable deletion strategies for B+ tree removal.
+//
+// TODO: research deletion algorithms that are better for concurrency.
+// Many examples require bottom-up recursion which may cause deadlocks without
+// blocking the whole table.
+#[allow(dead_code)]
+enum DeleteStrategy {
+    UnbalancedDelete,
+}
+static DELETE_STRATEGY: DeleteStrategy = DeleteStrategy::UnbalancedDelete;
+
 extern crate self as socks;
 mod bp_tree;
 mod buffer;

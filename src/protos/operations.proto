@@ -20,8 +20,12 @@ message InsertProto {
   RowProto row = 1;
 }
 
+message DeleteProto {
+  ColumnProto key = 1;
+}
+
 message ReadRowProto {
-  ColumnProto column = 2;
+  ColumnProto key = 1;
 }
 
 message QueryProto {

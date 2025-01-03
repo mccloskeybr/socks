@@ -14,6 +14,8 @@ message TableMetadataProto {
 message NodeProto {
   uint32 offset = 1;
   uint32 parent_offset = 2;
+  uint32 left_sibling_offset = 3;
+  uint32 right_sibling_offset = 4;
   oneof node_type {
     InternalNodeProto internal = 5;
     LeafNodeProto leaf = 6;

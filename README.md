@@ -6,7 +6,8 @@ A small relational database engine written in Rust, primarily for educational be
 
 - Tabular data abstraction.
 - Stores arbitrarily large datasets.
-- Structured operations for row insertion, retrieval, basic structured queries.
+- Basic CRUD operation support (row insertion, deletion, retrieval).
+- Basic structured query support.
 - Concurrent request processing.
 - SIMD-accelerated reads / writes.
 - Buffer pool / LRU cache for performant reads.
@@ -112,7 +113,6 @@ node at a time.
 
 ### Roadmap
 
-- Row deletion support.
 - Multiple table support.
 - Benchmarking suite.
 - Basic transaction support.

@@ -1,4 +1,4 @@
-use crate::error::*;
+use crate::error::{Error, ErrorKind::*};
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::marker::Unpin;
@@ -25,7 +25,7 @@ impl Filelike for File {
             .create_new(true)
             .open(path)
             .await
-            .map_err(|e| Error::FailedPrecondition(format!("Unable to open file: {e}")))?;
+            .map_err(|e| Error::new(FailedPrecondition, format!("Unable to open file: {e}")))?;
         Ok(file)
     }
 }

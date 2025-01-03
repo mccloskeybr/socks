@@ -1,6 +1,6 @@
 use crate::buffer::Buffer;
 use crate::buffer_pool::BufferPool;
-use crate::error::*;
+use crate::error::{Error, ErrorKind::*};
 use crate::protos::generated::chunk::*;
 use crate::protos::generated::config::*;
 use crate::protos::generated::operations::*;
@@ -271,6 +271,24 @@ async fn async_read_write_success() -> Result<(), Error> {
             assert_eq!(read_result, expected_read_result);
         });
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn delete_ok() -> Result<(), Error> {
+    let ctx = setup().await;
+    let table = ctx.table;
+
+    let mut col = ValueProto::new();
+    col.set_int_value(1);
+    let mut row = InternalRowProto::new();
+    row.col_values.push(col);
+    table.insert(1, row.clone()).await?;
+
+    let deleted_row = table.delete(1).await?;
+    assert_eq!(row, deleted_row);
+    assert_eq!(table.read_row(1).await.unwrap_err().kind, NotFound);
 
     Ok(())
 }
