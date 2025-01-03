@@ -9,7 +9,7 @@ A small relational database engine written in Rust, primarily for educational be
 - Structured operations for row insertion, retrieval, basic structured queries.
 - Concurrent request processing.
 - SIMD-accelerated reads / writes.
-- Latch-based LRU cache for accelerated reads.
+- Buffer pool / LRU cache for performant reads.
 - Configurable algorithms for benchmarking / experimentation.
 
 ## User guide
@@ -104,13 +104,15 @@ multiple requests to be processed asynchronously, and speeds up some operations
 (e.g. for row insertion, the primary index & all secondary indexes are executed
 concurrently).
 
-Internally, B+ tree nodes are cached in a sharded, latch-based buffer pool to
-ensure only one thread can read or write to a given node at a time.
+Internally, B+ tree nodes are cached in a sharded buffer pool for better
+concurrent access, behind a RwLock to ensure only one thread can update a given
+node at a time.
 
 ## Future
 
 ### Roadmap
 
+- Row deletion support.
 - Multiple table support.
 - Benchmarking suite.
 - Basic transaction support.
