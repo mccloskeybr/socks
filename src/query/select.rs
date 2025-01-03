@@ -15,7 +15,7 @@ pub(crate) async fn execute_select<F: Filelike>(
     let mut dep = ResultsReader::new(query::execute_query(db, select.dep.unwrap()).await?);
     let table: Arc<Table<F>> = db.table.clone();
     while let Ok(key) = dep.next_key().await {
-        let row = table.read_row(&db.buffer_pool, key).await?;
+        let row = table.read_row(key).await?;
         out.write_key_row(key, row).await?;
     }
     out.finish().await

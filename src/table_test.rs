@@ -15,25 +15,32 @@ type MetadataBuffer = Buffer<Cursor<Vec<u8>>, TableMetadataProto>;
 type NodeBuffer = Buffer<Cursor<Vec<u8>>, NodeProto>;
 
 struct TestContext {
-    file: Cursor<Vec<u8>>,
-    schema: TableSchema,
-    buffer_pool: BufferPool<Cursor<Vec<u8>>>,
+    table: Arc<Table<Cursor<Vec<u8>>>>,
 }
 
-fn setup() -> TestContext {
+async fn setup() -> TestContext {
     let _ = env_logger::builder().is_test(true).try_init();
-    TestContext {
-        file: Cursor::<Vec<u8>>::new(Vec::new()),
-        schema: parse_from_str::<TableSchema>(
-            "
+    let schema = parse_from_str::<TableSchema>(
+        "
             key {
                 name: \"Key\"
                 column_type: INTEGER
             }
             ",
-        )
-        .unwrap(),
-        buffer_pool: BufferPool::new(),
+    )
+    .unwrap();
+    TestContext {
+        table: Arc::new(
+            Table::create(
+                Cursor::<Vec<u8>>::new(Vec::new()),
+                Arc::new(BufferPool::new()),
+                "TestTable".to_string(),
+                0,
+                schema,
+            )
+            .await
+            .unwrap(),
+        ),
     }
 }
 
@@ -51,8 +58,8 @@ fn validate_node_sorted(node: &NodeProto) {
 
 #[tokio::test]
 async fn create_ok() -> Result<(), Error> {
-    let context = setup();
-    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let ctx = setup().await;
+    let table = ctx.table;
 
     assert_eq!(
         table.file.lock().await.get_ref().len(),
@@ -71,18 +78,16 @@ async fn create_ok() -> Result<(), Error> {
 
 #[tokio::test]
 async fn insert_single_ok() -> Result<(), Error> {
-    let mut context = setup();
-    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let ctx = setup().await;
+    let table = ctx.table;
 
     let mut col = ValueProto::new();
     col.set_int_value(1);
     let mut row = InternalRowProto::new();
     row.col_values.push(col);
-    table
-        .insert(&mut context.buffer_pool, 1, row.clone())
-        .await?;
+    table.insert(1, row.clone()).await?;
 
-    context.buffer_pool.flush().await?;
+    table.buffer_pool.flush().await?;
     assert_eq!(
         table.file.lock().await.get_ref().len(),
         (BUFFER_SIZE * 3) as usize
@@ -105,34 +110,28 @@ async fn insert_single_ok() -> Result<(), Error> {
 
 #[tokio::test]
 async fn insert_sorted() -> Result<(), Error> {
-    let mut context = setup();
-    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let ctx = setup().await;
+    let table = ctx.table;
 
     let mut col_1 = ValueProto::new();
     col_1.set_int_value(1);
     let mut row_1 = InternalRowProto::new();
     row_1.col_values.push(col_1);
-    table
-        .insert(&mut context.buffer_pool, 1, row_1.clone())
-        .await?;
+    table.insert(1, row_1.clone()).await?;
 
     let mut col_2 = ValueProto::new();
     col_2.set_int_value(2);
     let mut row_2 = InternalRowProto::new();
     row_2.col_values.push(col_2);
-    table
-        .insert(&mut context.buffer_pool, 2, row_2.clone())
-        .await?;
+    table.insert(2, row_2.clone()).await?;
 
     let mut col_3 = ValueProto::new();
     col_3.set_int_value(3);
     let mut row_3 = InternalRowProto::new();
     row_3.col_values.push(col_3);
-    table
-        .insert(&mut context.buffer_pool, 3, row_3.clone())
-        .await?;
+    table.insert(3, row_3.clone()).await?;
 
-    context.buffer_pool.flush().await?;
+    table.buffer_pool.flush().await?;
     assert_eq!(
         table.file.lock().await.get_ref().len(),
         (BUFFER_SIZE * 3) as usize
@@ -157,8 +156,8 @@ async fn insert_sorted() -> Result<(), Error> {
 
 #[tokio::test]
 async fn insert_with_split_ok() -> Result<(), Error> {
-    let mut context = setup();
-    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let ctx = setup().await;
+    let table = ctx.table;
 
     for i in 0..500 {
         let mut col = ValueProto::new();
@@ -166,12 +165,10 @@ async fn insert_with_split_ok() -> Result<(), Error> {
         let mut row = InternalRowProto::new();
         row.col_values.push(col);
 
-        table
-            .insert(&mut context.buffer_pool, i as u32, row)
-            .await?;
+        table.insert(i as u32, row).await?;
     }
 
-    context.buffer_pool.flush().await?;
+    table.buffer_pool.flush().await?;
     assert_eq!(
         table.file.lock().await.get_ref().len(),
         (BUFFER_SIZE * 4) as usize
@@ -191,30 +188,23 @@ async fn insert_with_split_ok() -> Result<(), Error> {
 
 #[tokio::test]
 async fn read_row_ok() -> Result<(), Error> {
-    let mut context = setup();
-    let table = Table::create(
-        context.file,
-        "TestTable".to_string(),
-        0,
-        context.schema.clone(),
-    )
-    .await?;
+    let ctx = setup().await;
+    let table = ctx.table;
+
     let row = parse_from_str::<InternalRowProto>("col_values { int_value: 1 }")?;
-    table
-        .insert(&mut context.buffer_pool, 1, row.clone())
-        .await?;
-    let read_result: RowProto = table.read_row(&mut context.buffer_pool, 1).await?;
+    table.insert(1, row.clone()).await?;
+    let read_result: RowProto = table.read_row(1).await?;
     assert_eq!(
         read_result,
-        schema::internal_row_to_row(&row, &context.schema)
+        schema::internal_row_to_row(&row, &table.schema)
     );
     Ok(())
 }
 
 #[tokio::test]
 async fn read_row_many_ok() -> Result<(), Error> {
-    let mut context = setup();
-    let table = Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?;
+    let ctx = setup().await;
+    let table = ctx.table;
     let num_iter = 100;
 
     for i in 0..num_iter {
@@ -223,13 +213,11 @@ async fn read_row_many_ok() -> Result<(), Error> {
         let mut row = InternalRowProto::new();
         row.col_values.push(col);
 
-        table
-            .insert(&mut context.buffer_pool, i as u32, row)
-            .await?;
+        table.insert(i as u32, row).await?;
     }
 
     for i in 0..num_iter {
-        let read_result = table.read_row(&mut context.buffer_pool, i as u32).await?;
+        let read_result = table.read_row(i as u32).await?;
 
         let mut expected_col_val = ColumnProto::new();
         expected_col_val.name = "Key".to_string();
@@ -248,15 +236,12 @@ async fn read_row_many_ok() -> Result<(), Error> {
 
 #[tokio::test]
 async fn async_read_write_success() -> Result<(), Error> {
-    let mut context = setup();
-    let table =
-        Arc::new(Table::create(context.file, "TestTable".to_string(), 0, context.schema).await?);
+    let ctx = setup().await;
+    let table = ctx.table;
     let num_iter = 100;
 
     let mut task_set = tokio::task::JoinSet::new();
     for i in 0..num_iter {
-        let buffer_pool: &mut BufferPool<Cursor<Vec<u8>>> =
-            unsafe { std::mem::transmute(&mut context.buffer_pool) };
         let table = table.clone();
         task_set.spawn(async move {
             let mut col = ValueProto::new();
@@ -264,17 +249,15 @@ async fn async_read_write_success() -> Result<(), Error> {
             let mut row = InternalRowProto::new();
             row.col_values.push(col);
 
-            table.insert(buffer_pool, i as u32, row).await.unwrap();
+            table.insert(i as u32, row).await.unwrap();
         });
     }
     task_set.join_all().await;
 
     for i in 0..num_iter {
-        let buffer_pool: &mut BufferPool<Cursor<Vec<u8>>> =
-            unsafe { std::mem::transmute(&mut context.buffer_pool) };
         let table = table.clone();
         tokio::spawn(async move {
-            let read_result = table.read_row(buffer_pool, i as u32).await.unwrap();
+            let read_result = table.read_row(i as u32).await.unwrap();
 
             let mut expected_col_val = ColumnProto::new();
             expected_col_val.name = "Key".to_string();

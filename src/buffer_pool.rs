@@ -8,11 +8,13 @@ use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
+// Individual LRU cache entries. Buffers are stored behind a lock to ensure
+// buffers cannot be written to while read.
 #[derive(Debug)]
 struct CacheEntry<F: Filelike> {
-    data: OnceCell<Arc<Mutex<Buffer<F, NodeProto>>>>,
+    data: OnceCell<Arc<RwLock<Buffer<F, NodeProto>>>>,
     table_id: u32,
     offset: u32,
     left: CacheEntryPtr<F>,
@@ -64,8 +66,10 @@ impl<F: Filelike> Clone for CacheEntryPtr<F> {
     }
 }
 
+// LRU cache implementation. Intended to be accessed behind a Mutex.
+// Recency is tracked through a doubly-linked list (tracked by sentinel).
+// Performant data retrieval is provided using the HashMap.
 struct Cache<F: Filelike> {
-    // Circular doubly-linked list of decreasing priority.
     sentinel: CacheEntryBox<F>,
     map: HashMap<(u32, u32), CacheEntryBox<F>>,
 }
@@ -82,33 +86,34 @@ impl<F: Filelike> Cache<F> {
             right: CacheEntryPtr(std::ptr::null_mut()),
         });
         let mut sentinel_ptr = sentinel.as_ptr();
-        sentinel_ptr.deref_mut().left = sentinel_ptr.clone();
-        sentinel_ptr.deref_mut().right = sentinel_ptr.clone();
+        sentinel_ptr.left = sentinel_ptr.clone();
+        sentinel_ptr.right = sentinel_ptr.clone();
         Self {
             sentinel: sentinel,
             map: HashMap::new(),
         }
     }
 
+    // Evict the least recently used item from the cache.
+    // NOTE: Expects the cache to have at least one element!
     async fn evict(&mut self) -> Result<(), Error> {
+        debug_assert!(self.map.len() > 0);
         let mut lru = self.sentinel.as_ptr().left.clone();
-        debug_assert!(lru.0 != self.sentinel.as_ptr().0);
-        let lru = lru.deref_mut();
         lru.left.right = lru.right.clone();
         lru.right.left = lru.left.clone();
 
         // NOTE: since this shard must be locked to retrieve the buffer lock, once
-        // this lock succeeds we know there are no outstanding threads using it.
-        let mut buffer = lru.data.get_mut().unwrap().lock().await;
-        if buffer.is_dirty {
-            buffer.write_to_file().await?;
-        }
+        // this lock succeeds we know there are no races on the evicted buffer.
+        let mut buffer = lru.data.get().unwrap().write().await;
+        buffer.write_to_file().await?;
 
         self.map.remove(&(lru.table_id, lru.offset));
 
         Ok(())
     }
 
+    // Marks the provided node as "most" recently used by moving it to the
+    // front of the list.
     fn promote(&mut self, entry_ptr: &mut CacheEntryPtr<F>) {
         entry_ptr.left = self.sentinel.as_ptr().clone();
         entry_ptr.right = self.sentinel.as_ptr().right.clone();
@@ -116,18 +121,20 @@ impl<F: Filelike> Cache<F> {
         entry_ptr.right.left = entry_ptr.clone();
     }
 
+    // Inserts the buffer into the cache, marks it as most recently used.
+    // NOTE: Expects the buffer to not already be present!
     async fn insert(
         &mut self,
         table_id: u32,
         offset: u32,
         buffer: Buffer<F, NodeProto>,
-    ) -> Result<Arc<Mutex<Buffer<F, NodeProto>>>, Error> {
+    ) -> Result<Arc<RwLock<Buffer<F, NodeProto>>>, Error> {
         debug_assert!(self.get(table_id, offset).await.is_none());
         if self.map.len() >= BUFFER_POOL_SHARD_SIZE {
             self.evict().await?;
         }
         let entry_box = CacheEntryBox::new(CacheEntry {
-            data: OnceCell::from(Arc::new(Mutex::new(buffer))),
+            data: OnceCell::from(Arc::new(RwLock::new(buffer))),
             table_id: table_id,
             offset: offset,
             left: CacheEntryPtr(std::ptr::null_mut()),
@@ -139,14 +146,17 @@ impl<F: Filelike> Cache<F> {
         Ok(entry_ptr.deref().data.get().unwrap().clone())
     }
 
+    // Gets the buffer associated with the given table and offset.
+    // Marks it as most recently used before returning.
     async fn get(
         &mut self,
         table_id: u32,
         offset: u32,
-    ) -> Option<Arc<Mutex<Buffer<F, NodeProto>>>> {
+    ) -> Option<Arc<RwLock<Buffer<F, NodeProto>>>> {
         match self.map.get(&(table_id, offset)) {
             Some(entry_box) => {
                 let mut entry_ptr = entry_box.as_ptr();
+                // remove entry_ptr from the recency list.
                 entry_ptr.left.right = entry_ptr.right.clone();
                 entry_ptr.right.left = entry_ptr.left.clone();
                 self.promote(&mut entry_ptr);
@@ -158,6 +168,8 @@ impl<F: Filelike> Cache<F> {
         }
     }
 
+    // Empties all buffers in the cache.
+    // This forces all dirty / in-flight buffers to commit any changes to disk.
     #[cfg(test)]
     async fn flush(&mut self) -> Result<(), Error> {
         while self.map.len() > 0 {
@@ -167,15 +179,16 @@ impl<F: Filelike> Cache<F> {
     }
 }
 
+// Manages all in-memory buffers (B+ node buffers specifically). Intended to be
+// shared across threads. Internally represented as an LRU cache, keyed on
+// table id + offset. Sharded for more efficient concurrent access.
 pub(crate) struct BufferPool<F: Filelike> {
     shards: Vec<Mutex<Cache<F>>>,
 }
 
-unsafe impl<F: Filelike> Send for BufferPool<F> {}
-unsafe impl<F: Filelike> Sync for BufferPool<F> {}
-
 impl<F: Filelike> BufferPool<F> {
-    fn shard_idx(offset: u32) -> usize {
+    // Finds what shard the given key is associated with.
+    fn shard_idx(_table_id: u32, offset: u32) -> usize {
         (offset as usize) % BUFFER_POOL_SHARD_COUNT
     }
 
@@ -187,21 +200,26 @@ impl<F: Filelike> BufferPool<F> {
         Self { shards: shards }
     }
 
+    // Claims the next offset for the given table and creates an empty buffer
+    // at that location.
     pub(crate) async fn new_next_for_table(
         &self,
         table: &Table<F>,
-    ) -> Result<Arc<Mutex<Buffer<F, NodeProto>>>, Error> {
+    ) -> Result<Arc<RwLock<Buffer<F, NodeProto>>>, Error> {
         let buffer = Buffer::new_next_for_table(table).await;
-        let mut shard = self.shards[Self::shard_idx(buffer.offset)].lock().await;
+        let mut shard = self.shards[Self::shard_idx(table.id, buffer.offset)]
+            .lock()
+            .await;
         shard.insert(table.id, buffer.offset, buffer).await
     }
 
+    // Retrieves / reads the buffer on the given table at the given index.
     pub(crate) async fn read_from_table(
         &self,
         table: &Table<F>,
         offset: u32,
-    ) -> Result<Arc<Mutex<Buffer<F, NodeProto>>>, Error> {
-        let mut shard = self.shards[Self::shard_idx(offset)].lock().await;
+    ) -> Result<Arc<RwLock<Buffer<F, NodeProto>>>, Error> {
+        let mut shard = self.shards[Self::shard_idx(table.id, offset)].lock().await;
         match shard.get(table.id, offset).await {
             Some(buffer) => return Ok(buffer),
             None => {
@@ -211,6 +229,7 @@ impl<F: Filelike> BufferPool<F> {
         }
     }
 
+    // Forces all dirty / in-flight buffers to commit any changes to disk.
     #[cfg(test)]
     pub(crate) async fn flush(&self) -> Result<(), Error> {
         for shard in &self.shards {

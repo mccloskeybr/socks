@@ -23,15 +23,13 @@ use tokio::sync::Mutex;
 
 pub(crate) struct Table<F: Filelike> {
     pub(crate) file: Arc<Mutex<F>>,
+    pub(crate) buffer_pool: Arc<BufferPool<F>>,
     pub(crate) name: String,
     pub(crate) id: u32,
     pub(crate) schema: TableSchema,
     pub(crate) root_chunk_offset: u32,
     pub(crate) next_chunk_offset: AtomicU32,
 }
-
-unsafe impl<F: Filelike> Send for Table<F> {}
-unsafe impl<F: Filelike> Sync for Table<F> {}
 
 impl<F: Filelike> Table<F> {
     pub(crate) fn next_chunk_offset(&self) -> u32 {
@@ -58,6 +56,7 @@ impl<F: Filelike> Table<F> {
 
     pub(crate) async fn create(
         file: F,
+        buffer_pool: Arc<BufferPool<F>>,
         name: String,
         id: u32,
         schema: TableSchema,
@@ -84,6 +83,7 @@ impl<F: Filelike> Table<F> {
         }
         Ok(Self {
             file: file,
+            buffer_pool: buffer_pool,
             name: name,
             id: id,
             schema: schema,
@@ -92,24 +92,14 @@ impl<F: Filelike> Table<F> {
         })
     }
 
-    pub(crate) async fn insert(
-        &self,
-        buffer_pool: &BufferPool<F>,
-        key: u32,
-        row: InternalRowProto,
-    ) -> Result<(), Error> {
+    pub(crate) async fn insert(&self, key: u32, row: InternalRowProto) -> Result<(), Error> {
         log::trace!("Inserting row: {row}");
-        bp_tree::insert(self, buffer_pool, key, row).await
+        bp_tree::insert(self, key, row).await
     }
 
-    pub(crate) async fn read_row(
-        &self,
-        buffer_pool: &BufferPool<F>,
-        key: u32,
-    ) -> Result<RowProto, Error> {
+    pub(crate) async fn read_row(&self, key: u32) -> Result<RowProto, Error> {
         log::trace!("Retrieving row with key: {key}");
-        let internal_row =
-            bp_tree::read_row(self, buffer_pool, self.root_chunk_offset, key).await?;
+        let internal_row = bp_tree::read_row(self, self.root_chunk_offset, key).await?;
         Ok(schema::internal_row_to_row(&internal_row, &self.schema))
     }
 }

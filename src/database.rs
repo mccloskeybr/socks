@@ -15,7 +15,6 @@ use std::sync::Arc;
 pub struct Database<F: Filelike> {
     pub(crate) table: Arc<Table<F>>,
     pub(crate) secondary_indexes: Vec<Arc<Table<F>>>,
-    pub(crate) buffer_pool: BufferPool<F>,
 }
 
 impl<F: Filelike> Database<F> {
@@ -40,10 +39,13 @@ impl<F: Filelike> Database<F> {
     // TODO: validate dir doesn't exist, schema.
     // probably want to move validations to the db level instead of the index level.
     pub async fn create(dir: &str, schema: DatabaseSchema) -> Result<Self, Error> {
+        let buffer_pool = Arc::new(BufferPool::new());
+
         let mut next_table_id = 0;
         let table = Arc::new(
             Table::create(
                 F::create(format!("{}/{}", dir, "table").as_str()).await?,
+                buffer_pool.clone(),
                 format!("Table{}", schema.table.key.name),
                 next_table_id,
                 schema.table.clone().unwrap(),
@@ -58,6 +60,7 @@ impl<F: Filelike> Database<F> {
                 Table::create(
                     F::create(format!("{}/{}", dir, &secondary_index_schema.key.name).as_str())
                         .await?,
+                    buffer_pool.clone(),
                     format!(
                         "Table{}Index{}",
                         schema.table.key.name, secondary_index_schema.key.name
@@ -76,7 +79,6 @@ impl<F: Filelike> Database<F> {
         Ok(Self {
             table: table,
             secondary_indexes: secondary_indexes,
-            buffer_pool: BufferPool::new(),
         })
     }
 
@@ -86,9 +88,7 @@ impl<F: Filelike> Database<F> {
     pub async fn insert(&self, op: InsertProto) -> Result<(), Error> {
         let table_key = schema::get_hashed_key_from_row(&op.row, &self.table.schema);
         let table_row_internal = schema::row_to_internal_row(&op.row);
-        self.table
-            .insert(&self.buffer_pool, table_key, table_row_internal)
-            .await?;
+        self.table.insert(table_key, table_row_internal).await?;
 
         for secondary_index in &self.secondary_indexes {
             let index_row = schema::table_row_to_index_row(
@@ -99,7 +99,7 @@ impl<F: Filelike> Database<F> {
             let index_key = schema::get_hashed_key_from_row(&index_row, &secondary_index.schema);
             let index_row_internal = schema::row_to_internal_row(&index_row);
             secondary_index
-                .insert(&self.buffer_pool, index_key, index_row_internal)
+                .insert(index_key, index_row_internal)
                 .await?;
         }
 
@@ -108,7 +108,7 @@ impl<F: Filelike> Database<F> {
 
     pub async fn read_row(&self, op: ReadRowProto) -> Result<RowProto, Error> {
         let hashed_key = schema::get_hashed_col_value(&op.column.value);
-        self.table.read_row(&self.buffer_pool, hashed_key).await
+        self.table.read_row(hashed_key).await
     }
 
     pub async fn query(&self, op: QueryProto) -> Result<F, Error> {

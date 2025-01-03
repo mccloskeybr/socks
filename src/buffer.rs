@@ -12,11 +12,14 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::sync::Mutex;
 
+// Buffers represent a single page, chunk, etc. of data stored on disk. Each chunk
+// is guaranteed to be of a static size BUFFER_SIZE. Each buffer stores a single
+// protobuf message, e.g. a B+ tree node, or table metadata, etc. Not thread safe /
+// intended to be accessed behind some locking mechanism.
+//
 // Byte format of each buffer is the following:
 // 1. data size: u16 / 2 bytes.
 // 2. data: [u8] proto message to end of section.
-// Each section is guaranteed to be of a configurable static size (BUFFER_SIZE).
-
 #[derive(Debug)]
 pub(crate) struct Buffer<F: Filelike, M: Message> {
     pub(crate) file: Arc<Mutex<F>>,
@@ -26,6 +29,7 @@ pub(crate) struct Buffer<F: Filelike, M: Message> {
 }
 
 impl<F: Filelike, M: Message> Buffer<F, M> {
+    // Writes all bytes from src into dest at cursor. Increments cursor by the size of src.
     fn write_bytes(
         src: &[u8],
         dest: &mut [u8; BUFFER_SIZE],
@@ -47,6 +51,7 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         Ok(())
     }
 
+    // Transforms the given protobuf message into a buffer byte array.
     fn message_to_bytes(msg: &M) -> Result<[u8; BUFFER_SIZE], Error> {
         let data: Vec<u8> = msg.write_to_bytes()?;
         let data_len: u16 = data.len().try_into().unwrap();
@@ -57,6 +62,8 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         Ok(bytes)
     }
 
+    // Reads and returns size bytes from the provided src buffer. Increments Cursor by size.
+    // Intended to consume a byte array / transform into a known structure.
     fn read_slice<'a>(src: &'a [u8], size: usize, cursor: &mut usize) -> Result<&'a [u8], Error> {
         let Some(slice) = src.get(*cursor..*cursor + size) else {
             return Err(Error::OutOfBounds(
@@ -67,6 +74,7 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         Ok(slice)
     }
 
+    // Interprets the given buffer bytes as a buffer protobuf message.
     fn message_from_bytes(bytes: &[u8]) -> Result<M, Error> {
         let mut cursor: usize = 0;
         let slice = Self::read_slice(bytes, std::mem::size_of::<u16>(), &mut cursor)?;
@@ -75,6 +83,7 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         Ok(M::parse_from_bytes(&slice)?)
     }
 
+    // Creates an empty buffer associated with the given file / offset.
     pub(crate) fn new_for_file(file: Arc<Mutex<F>>, offset: u32, data: M) -> Self {
         Self {
             file: file,
@@ -84,10 +93,13 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         }
     }
 
+    // Claims the next offset for the given table and creates an empty buffer
+    // at that location.
     pub(crate) async fn new_next_for_table(table: &Table<F>) -> Self {
         Self::new_for_file(table.file.clone(), table.next_chunk_offset(), M::new())
     }
 
+    // Reads the buffer at the given file / offset and returns it.
     pub(crate) async fn read_from_file(file: Arc<Mutex<F>>, offset: u32) -> Result<Self, Error> {
         let mut bytes = [0; BUFFER_SIZE];
         {
@@ -97,22 +109,26 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
                 .await?;
             file_lock.read(&mut bytes).await?;
         }
-        let msg = Self::message_from_bytes(&bytes)?;
         Ok(Self {
             file: file,
             offset: offset,
-            data: msg,
+            data: Self::message_from_bytes(&bytes)?,
             is_dirty: false,
         })
     }
 
+    // Reads the buffer at the given table's file / offset and returns it.
     pub(crate) async fn read_from_table(table: &Table<F>, offset: u32) -> Result<Self, Error> {
-        let file = table.file.clone();
-        Self::read_from_file(file, offset).await
+        Self::read_from_file(table.file.clone(), offset).await
     }
 
+    // Writes the buffer's current contents to its configured location.
+    // NOTE: Expects that the buffer does not exceed the static size limit.
     pub(crate) async fn write_to_file(&mut self) -> Result<(), Error> {
         assert!(!self.would_overflow(0));
+        if !self.is_dirty {
+            return Ok(());
+        }
         let bytes: [u8; BUFFER_SIZE] = Self::message_to_bytes(&self.data)?;
         {
             let mut file_lock = self.file.lock().await;
@@ -125,6 +141,8 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         Ok(())
     }
 
+    // Returns true iff adding the provided size to the buffer will exceed
+    // the static size limit.
     pub(crate) fn would_overflow(&self, addl_size: usize) -> bool {
         let size_estimate = std::mem::size_of::<u16>()
             + self.data.compute_size() as usize
@@ -133,10 +151,13 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
         BUFFER_SIZE <= size_estimate.try_into().unwrap()
     }
 
+    // Retrieve an immutable reference to the underlying proto.
     pub(crate) fn get<'a>(&'a self) -> &'a M {
         &self.data
     }
 
+    // Retrieve a mutable reference to the underlying proto.
+    // Silently marks the buffer as having uncommitted changes.
     pub(crate) fn get_mut<'a>(&'a mut self) -> &'a mut M {
         self.is_dirty = true;
         &mut self.data

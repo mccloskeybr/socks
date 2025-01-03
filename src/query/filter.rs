@@ -20,7 +20,7 @@ async fn execute_filter_equals<F: Filelike>(
 
     // TODO: return empty on doesn't exist instead of error.
     let key = schema::get_hashed_col_value(&equals.value);
-    let row = table.read_row(&db.buffer_pool, key).await?;
+    let row = table.read_row(key).await?;
     let pk = schema::get_col(&row, &db.table.schema.key.name);
     let pk_hash = schema::get_hashed_col_value(&pk.value);
 

@@ -14,14 +14,13 @@ use tokio::sync::Mutex;
 type QueryResultsBuffer = Buffer<Cursor<Vec<u8>>, InternalQueryResultsProto>;
 
 struct TestContext {
-    schema: DatabaseSchema,
+    db: Arc<Database<Cursor<Vec<u8>>>>,
 }
 
-fn setup() -> TestContext {
+async fn setup() -> TestContext {
     let _ = env_logger::builder().is_test(true).try_init();
-    TestContext {
-        schema: parse_from_str::<DatabaseSchema>(
-            "
+    let schema = parse_from_str::<DatabaseSchema>(
+        "
             table {
                 key {
                     name: \"Key\"
@@ -39,15 +38,17 @@ fn setup() -> TestContext {
                 }
             }
             ",
-        )
-        .unwrap(),
+    )
+    .unwrap();
+    TestContext {
+        db: Arc::new(Database::create("", schema).await.unwrap()),
     }
 }
 
 #[tokio::test]
 async fn insert_single_success() -> Result<(), Error> {
-    let context = setup();
-    let db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
+    let ctx = setup().await;
+    let db = ctx.db;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -72,7 +73,7 @@ async fn insert_single_success() -> Result<(), Error> {
     // row in primary index
     {
         let expected_table_row_internal = insert_operation.row.clone().unwrap();
-        let table_row_internal = db.table.read_row(&db.buffer_pool, 1).await?;
+        let table_row_internal = db.table.read_row(1).await?;
         assert_eq!(expected_table_row_internal, table_row_internal);
     }
     // row in secondary index
@@ -84,7 +85,7 @@ async fn insert_single_success() -> Result<(), Error> {
             &db.table.schema,
         );
         let expected_index_row_internal = index_row;
-        let index_row_internal = secondary_index.read_row(&db.buffer_pool, 2).await?;
+        let index_row_internal = secondary_index.read_row(2).await?;
         assert_eq!(expected_index_row_internal, index_row_internal);
     }
 
@@ -93,8 +94,8 @@ async fn insert_single_success() -> Result<(), Error> {
 
 #[tokio::test]
 async fn read_single_success() -> Result<(), Error> {
-    let context = setup();
-    let db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
+    let ctx = setup().await;
+    let db = ctx.db;
 
     let insert_operation = parse_from_str::<InsertProto>(
         "
@@ -135,8 +136,8 @@ async fn read_single_success() -> Result<(), Error> {
 
 #[tokio::test]
 async fn query_success() -> Result<(), Error> {
-    let context = setup();
-    let db: Database<Cursor<Vec<u8>>> = Database::create("", context.schema).await?;
+    let ctx = setup().await;
+    let db = ctx.db;
 
     for i in 0..50 {
         let mut key = ColumnProto::new();
@@ -201,8 +202,8 @@ async fn query_success() -> Result<(), Error> {
 
 #[tokio::test]
 async fn async_read_write_success() -> Result<(), Error> {
-    let context = setup();
-    let db: Arc<Database<Cursor<Vec<u8>>>> = Arc::new(Database::create("", context.schema).await?);
+    let ctx = setup().await;
+    let db = ctx.db;
     let num_iter = 100;
 
     let mut task_set = tokio::task::JoinSet::new();

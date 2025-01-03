@@ -1,4 +1,3 @@
-use crate::buffer_pool::BufferPool;
 use crate::error::*;
 use crate::filelike::Filelike;
 use crate::protos::generated::chunk::*;
@@ -42,18 +41,20 @@ pub(crate) fn find_row_idx_for_key(leaf: &LeafNodeProto, key: u32) -> usize {
 // finds the row with the associated key, else returns NotFound.
 pub(crate) async fn read_row<F: Filelike>(
     table: &Table<F>,
-    buffer_pool: &BufferPool<F>,
     curr_offset: u32,
     key: u32,
 ) -> Result<InternalRowProto, Error> {
-    let node_buffer_mutex = buffer_pool.read_from_table(table, curr_offset).await?;
-    let node_buffer = node_buffer_mutex.lock().await;
+    let node_buffer_lock = table
+        .buffer_pool
+        .read_from_table(table, curr_offset)
+        .await?;
+    let node_buffer = node_buffer_lock.read().await;
     match &node_buffer.get().node_type {
         Some(node_proto::Node_type::Internal(internal)) => {
             let idx = find_next_node_idx_for_key(&internal, key)?;
             let child_offset = internal.child_offsets[idx];
             drop(node_buffer);
-            return Box::pin(read_row(table, buffer_pool, child_offset, key)).await;
+            return Box::pin(read_row(table, child_offset, key)).await;
         }
         Some(node_proto::Node_type::Leaf(leaf)) => {
             let idx = find_row_idx_for_key(&leaf, key);
@@ -69,13 +70,12 @@ pub(crate) async fn read_row<F: Filelike>(
 // inserts the row with the associated key into the table.
 pub(crate) async fn insert<F: Filelike>(
     table: &Table<F>,
-    buffer_pool: &BufferPool<F>,
     key: u32,
     row: InternalRowProto,
 ) -> Result<(), Error> {
     match WRITE_STRATEGY {
         AggressiveSplit => {
-            return insert_aggressive_split::insert::<F>(table, buffer_pool, key, row).await;
+            return insert_aggressive_split::insert::<F>(table, key, row).await;
         }
     }
 }
