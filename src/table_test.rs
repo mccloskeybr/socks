@@ -191,7 +191,7 @@ async fn read_row_ok() -> Result<(), Error> {
     let ctx = setup().await;
     let table = ctx.table;
 
-    let row = parse_from_str::<InternalRowProto>("col_values { int_value: 1 }")?;
+    let row = parse_from_str::<InternalRowProto>("col_values { int_value: 1 }").unwrap();
     table.insert(1, row.clone()).await?;
     let read_result: RowProto = table.read_row(1).await?;
     assert_eq!(

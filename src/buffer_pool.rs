@@ -68,7 +68,7 @@ impl<F: Filelike> Clone for CacheEntryPtr<F> {
 
 // LRU cache implementation. Intended to be accessed behind a Mutex.
 // Recency is tracked through a doubly-linked list (tracked by sentinel).
-// Performant data retrieval is provided using the HashMap.
+// Performant data retrieval is supported using the HashMap.
 struct Cache<F: Filelike> {
     sentinel: CacheEntryBox<F>,
     map: HashMap<(u32, u32), CacheEntryBox<F>>,
@@ -103,8 +103,11 @@ impl<F: Filelike> Cache<F> {
         lru.right.left = lru.left.clone();
 
         // NOTE: since this shard must be locked to retrieve the buffer lock, once
-        // this lock succeeds we know there are no races on the evicted buffer.
-        let mut buffer = lru.data.get().unwrap().write().await;
+        // this exclusive lock request succeeds we know there are no races on the
+        // evicted buffer. if there is a pending request to read the buffer we're
+        // about to evict, we will simply re-read it in, after any dirty data has
+        // been committed and the locks are released.
+        let buffer = lru.data.get().unwrap().write().await;
         buffer.write_to_file().await?;
 
         self.map.remove(&(lru.table_id, lru.offset));
@@ -188,8 +191,9 @@ pub(crate) struct BufferPool<F: Filelike> {
 
 impl<F: Filelike> BufferPool<F> {
     // Finds what shard the given key is associated with.
-    fn shard_idx(_table_id: u32, offset: u32) -> usize {
-        (offset as usize) % BUFFER_POOL_SHARD_COUNT
+    fn shard_idx(table_id: u32, offset: u32) -> usize {
+        let cantor = (table_id + offset) * (table_id + offset + 1) / 2 + table_id;
+        cantor as usize % BUFFER_POOL_SHARD_COUNT
     }
 
     pub(crate) fn new() -> Self {

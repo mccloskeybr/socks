@@ -25,7 +25,7 @@ async fn read_write_single_buffer() -> Result<(), Error> {
 
     let mut metadata = TableMetadataProto::new();
     metadata.next_chunk_offset = 1;
-    let mut buffer_out = MetadataBuffer::new_for_file(context.file.clone(), 0, metadata);
+    let buffer_out = MetadataBuffer::new_for_file(context.file.clone(), 0, metadata);
     buffer_out.write_to_file().await?;
     assert_eq!(context.file.lock().await.get_ref().len(), BUFFER_SIZE);
 
@@ -44,7 +44,7 @@ async fn read_write_many_buffers() -> Result<(), Error> {
     for i in 0..n {
         let mut metadata = TableMetadataProto::new();
         metadata.next_chunk_offset = i;
-        let mut buffer = MetadataBuffer::new_for_file(context.file.clone(), i, metadata);
+        let buffer = MetadataBuffer::new_for_file(context.file.clone(), i, metadata);
         buffer.write_to_file().await?;
         buffers.push(buffer);
     }
@@ -67,13 +67,13 @@ async fn overwrite_buffer() -> Result<(), Error> {
 
     let mut metadata_1 = TableMetadataProto::new();
     metadata_1.next_chunk_offset = 1;
-    let mut buffer_1 = MetadataBuffer::new_for_file(context.file.clone(), 0, metadata_1);
+    let buffer_1 = MetadataBuffer::new_for_file(context.file.clone(), 0, metadata_1);
     buffer_1.write_to_file().await?;
     assert_eq!(context.file.lock().await.get_ref().len(), BUFFER_SIZE);
 
     let mut metadata_2 = TableMetadataProto::new();
     metadata_2.next_chunk_offset = 2;
-    let mut buffer_2 = MetadataBuffer::new_for_file(context.file.clone(), 0, metadata_2);
+    let buffer_2 = MetadataBuffer::new_for_file(context.file.clone(), 0, metadata_2);
     buffer_2.write_to_file().await?;
     assert_eq!(
         context.file.lock().await.get_ref().len(),

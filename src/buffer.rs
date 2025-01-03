@@ -53,7 +53,9 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
 
     // Transforms the given protobuf message into a buffer byte array.
     fn message_to_bytes(msg: &M) -> Result<[u8; BUFFER_SIZE], Error> {
-        let data: Vec<u8> = msg.write_to_bytes()?;
+        let data: Vec<u8> = msg
+            .write_to_bytes()
+            .map_err(|e| Error::DataLoss(format!("Unable to convert buffer to bytes: {e}")))?;
         let data_len: u16 = data.len().try_into().unwrap();
         let mut bytes = [0; BUFFER_SIZE];
         let mut cursor: usize = 0;
@@ -78,9 +80,11 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
     fn message_from_bytes(bytes: &[u8]) -> Result<M, Error> {
         let mut cursor: usize = 0;
         let slice = Self::read_slice(bytes, std::mem::size_of::<u16>(), &mut cursor)?;
-        let buffer_size = u16::from_be_bytes(slice.try_into()?);
+        let buffer_size = u16::from_be_bytes(slice.try_into().unwrap());
         let slice = Self::read_slice(bytes, buffer_size as usize, &mut cursor)?;
-        Ok(M::parse_from_bytes(&slice)?)
+        let msg = M::parse_from_bytes(&slice)
+            .map_err(|e| Error::DataLoss(format!("Unable to interpret buffer from bytes: {e}")))?;
+        Ok(msg)
     }
 
     // Creates an empty buffer associated with the given file / offset.
@@ -103,11 +107,13 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
     pub(crate) async fn read_from_file(file: Arc<Mutex<F>>, offset: u32) -> Result<Self, Error> {
         let mut bytes = [0; BUFFER_SIZE];
         {
-            let mut file_lock = file.lock().await;
-            file_lock
-                .seek(SeekFrom::Start(offset as u64 * BUFFER_SIZE as u64))
-                .await?;
-            file_lock.read(&mut bytes).await?;
+            let mut file = file.lock().await;
+            file.seek(SeekFrom::Start(offset as u64 * BUFFER_SIZE as u64))
+                .await
+                .map_err(|e| Error::Internal(format!("Unable to seek file for read call: {e}")))?;
+            file.read(&mut bytes)
+                .await
+                .map_err(|e| Error::Internal(format!("Unable to read file: {e}")))?;
         }
         Ok(Self {
             file: file,
@@ -124,19 +130,23 @@ impl<F: Filelike, M: Message> Buffer<F, M> {
 
     // Writes the buffer's current contents to its configured location.
     // NOTE: Expects that the buffer does not exceed the static size limit.
-    pub(crate) async fn write_to_file(&mut self) -> Result<(), Error> {
+    pub(crate) async fn write_to_file(&self) -> Result<(), Error> {
         assert!(!self.would_overflow(0));
         if !self.is_dirty {
             return Ok(());
         }
         let bytes: [u8; BUFFER_SIZE] = Self::message_to_bytes(&self.data)?;
         {
-            let mut file_lock = self.file.lock().await;
-            file_lock
-                .seek(SeekFrom::Start(self.offset as u64 * BUFFER_SIZE as u64))
-                .await?;
-            file_lock.write(&bytes).await?;
-            file_lock.flush().await?;
+            let mut file = self.file.lock().await;
+            file.seek(SeekFrom::Start(self.offset as u64 * BUFFER_SIZE as u64))
+                .await
+                .map_err(|e| Error::Internal(format!("Unable to seek file for write call: {e}")))?;
+            file.write(&bytes)
+                .await
+                .map_err(|e| Error::Internal(format!("Unable to write to file: {e}")))?;
+            file.flush()
+                .await
+                .map_err(|e| Error::Internal(format!("Unable to flush file: {e}")))?;
         }
         Ok(())
     }

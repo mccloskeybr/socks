@@ -67,7 +67,8 @@ async fn insert_single_success() -> Result<(), Error> {
             }
         }
         ",
-    )?;
+    )
+    .unwrap();
     db.insert(insert_operation.clone()).await?;
 
     // row in primary index
@@ -114,7 +115,8 @@ async fn read_single_success() -> Result<(), Error> {
             }
         }
         ",
-    )?;
+    )
+    .unwrap();
     db.insert(insert_operation.clone()).await?;
 
     let read_operation = parse_from_str::<ReadRowProto>(
@@ -126,7 +128,8 @@ async fn read_single_success() -> Result<(), Error> {
             }
         }
         ",
-    )?;
+    )
+    .unwrap();
     let row = db.read_row(read_operation).await;
 
     assert_eq!(insert_operation.row.unwrap(), row.unwrap());
@@ -171,7 +174,8 @@ async fn query_success() -> Result<(), Error> {
             }
         }
         ",
-    )?;
+    )
+    .unwrap();
     let query_results_file = db.query(query_operation).await?;
     let query_results =
         QueryResultsBuffer::read_from_file(Arc::new(Mutex::new(query_results_file)), 0).await?;
@@ -194,7 +198,8 @@ async fn query_success() -> Result<(), Error> {
             }
         }
         ",
-    )?;
+    )
+    .unwrap();
     assert_eq!(query_results.data, expected_query_results);
 
     Ok(())

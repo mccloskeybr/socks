@@ -19,12 +19,14 @@ pub trait Filelike: Debug + Unpin + Send + AsyncRead + AsyncWrite + AsyncSeek + 
 
 impl Filelike for File {
     async fn create(path: &str) -> Result<Self, Error> {
-        Ok(OpenOptions::new()
+        let file = OpenOptions::new()
             .read(true)
             .write(true)
             .create_new(true)
             .open(path)
-            .await?)
+            .await
+            .map_err(|e| Error::FailedPrecondition(format!("Unable to open file: {e}")))?;
+        Ok(file)
     }
 }
 

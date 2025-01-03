@@ -61,7 +61,7 @@ impl<F: Filelike> ResultsWriter<F> {
         Ok(())
     }
 
-    pub(crate) async fn finish(mut self) -> Result<F, Error> {
+    pub(crate) async fn finish(self) -> Result<F, Error> {
         self.current_buffer.write_to_file().await?;
         Ok(Arc::into_inner(self.current_buffer.file)
             .unwrap()
